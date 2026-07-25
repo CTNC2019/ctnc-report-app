@@ -74,7 +74,16 @@ export async function GET(request: Request) {
   const bySite = new Map(raw.siteUpdates.map((s) => [s.siteCode, s]));
 
   const fontDir = path.join(process.cwd(), "public", "fonts");
-  const doc = new PDFDocument({ margin: 40, size: "A4", bufferPages: true });
+  // font: null prevents PDFKit from eagerly loading its bundled Helvetica.afm at
+  // construction time — that lookup fails on Vercel (file tracing does not reliably
+  // include pdfkit's data/*.afm assets), and we only ever use our own embedded TTFs
+  // anyway (registered and selected explicitly below).
+  const doc = new PDFDocument({
+    margin: 40,
+    size: "A4",
+    bufferPages: true,
+    font: null as unknown as string,
+  });
   doc.registerFont("Regular", path.join(fontDir, "DejaVuSans.ttf"));
   doc.registerFont("Bold", path.join(fontDir, "DejaVuSans-Bold.ttf"));
 

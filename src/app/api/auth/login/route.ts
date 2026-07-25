@@ -8,7 +8,7 @@ export const runtime = "nodejs";
 
 export async function POST(request: Request) {
   try {
-    const { userId, password } = await request.json();
+    const { userId, password, remember } = await request.json();
     if (!userId || !password) {
       return NextResponse.json({ success: false, error: "missing" }, { status: 400 });
     }
@@ -31,13 +31,21 @@ export async function POST(request: Request) {
       email: u.Email || "",
     };
     const store = await cookies();
-    store.set(SESSION_COOKIE, createSessionCookieValue(sessionUser), {
+    const cookieOpts: Parameters<typeof store.set>[2] = {
       httpOnly: true,
       sameSite: "lax",
       secure: process.env.NODE_ENV === "production",
       path: "/",
-      maxAge: 60 * 60 * 24 * 7,
-    });
+    };
+    // "Remember me": persist the session for 30 days. Otherwise use a browser-session
+    // cookie (no maxAge) that goes away when the browser is closed, plus a short
+    // fallback so an accidental tab-only close doesn't force an immediate re-login.
+    if (remember) {
+      cookieOpts.maxAge = 60 * 60 * 24 * 30;
+    } else {
+      cookieOpts.maxAge = 60 * 60 * 12;
+    }
+    store.set(SESSION_COOKIE, createSessionCookieValue(sessionUser), cookieOpts);
     return NextResponse.json({ success: true, user: sessionUser });
   } catch (err) {
     const message = err instanceof Error ? err.message : "unknown error";

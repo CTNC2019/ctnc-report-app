@@ -4,6 +4,7 @@ import { useEffect, useState, use as usePromise } from "react";
 import Link from "next/link";
 import { ArrowLeft, MapPin, FileText, AlertTriangle, CheckCircle, Undo2, Megaphone, ListChecks, CalendarClock } from "lucide-react";
 import Nav from "@/components/Nav";
+import CommentsThread from "@/components/CommentsThread";
 import { useLanguage } from "@/context/LanguageContext";
 import { useSession } from "@/hooks/useSession";
 
@@ -46,7 +47,7 @@ function Section({ icon, title, children }: { icon: React.ReactNode; title: stri
 export default function ReportView({ params }: { params: Promise<{ id: string }> }) {
   const { id } = usePromise(params);
   const { t } = useLanguage();
-  const { isManager } = useSession();
+  const { user, isManager } = useSession();
   const [report, setReport] = useState<ReportDetail | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -225,6 +226,8 @@ export default function ReportView({ params }: { params: Promise<{ id: string }>
                 {report.deadlines.length === 0 && <p className="text-sm text-slate-500">{t("form.noItems")}</p>}
               </div>
             </Section>
+
+            {user && <CommentsThread reportId={report.id} currentUserId={user.id} isManager={isManager} />}
           </div>
         )}
       </main>

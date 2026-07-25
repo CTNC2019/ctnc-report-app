@@ -7,8 +7,13 @@ import { useLanguage } from "@/context/LanguageContext";
 
 export default function LoginForm() {
   const { t } = useLanguage();
-  const [userId, setUserId] = useState("");
+  const [userId, setUserId] = useState(() =>
+    typeof window === "undefined" ? "" : window.localStorage.getItem("ctnc_remember_userid") || ""
+  );
   const [password, setPassword] = useState("");
+  const [remember, setRemember] = useState(() =>
+    typeof window === "undefined" ? false : !!window.localStorage.getItem("ctnc_remember_userid")
+  );
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const [showForgot, setShowForgot] = useState(false);
@@ -23,10 +28,15 @@ export default function LoginForm() {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId, password }),
+        body: JSON.stringify({ userId, password, remember }),
       });
       const data = await res.json();
       if (data.success) {
+        if (remember) {
+          window.localStorage.setItem("ctnc_remember_userid", userId);
+        } else {
+          window.localStorage.removeItem("ctnc_remember_userid");
+        }
         window.location.href = "/dashboard";
       } else {
         setError(t("login.error"));
@@ -79,6 +89,16 @@ export default function LoginForm() {
             />
           </div>
         </div>
+
+        <label className="flex items-center gap-2.5 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={remember}
+            onChange={(e) => setRemember(e.target.checked)}
+            className="w-4 h-4 rounded border-white/20 bg-white/5 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-0 cursor-pointer accent-emerald-500"
+          />
+          <span className="text-sm text-emerald-100/80">{t("login.remember")}</span>
+        </label>
 
         {error && (
           <motion.p
