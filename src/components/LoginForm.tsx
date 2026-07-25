@@ -3,8 +3,10 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { User, Lock, ArrowRight, Loader2, X, Mail, ShieldAlert } from "lucide-react";
+import { useLanguage } from "@/context/LanguageContext";
 
 export default function LoginForm() {
+  const { t } = useLanguage();
   const [userId, setUserId] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -17,21 +19,18 @@ export default function LoginForm() {
     setIsLoading(true);
     setError("");
 
-    // Simulate API call
     setTimeout(() => {
       setIsLoading(false);
-      // Hardcoded check cho CTNC-01
       if (userId.toLowerCase() === "ctnc-01" && password === "12345678") {
-        // success - redirect to dashboard
         window.location.href = "/dashboard";
       } else {
-        setError("Mã User ID hoặc mật khẩu không đúng.");
+        setError(t("login.error"));
       }
     }, 1500);
   };
 
   return (
-    <motion.div 
+    <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5, ease: "easeOut" }}
@@ -39,7 +38,7 @@ export default function LoginForm() {
     >
       <form onSubmit={handleLogin} className="space-y-6">
         <div>
-          <label className="block text-sm font-medium text-emerald-100 mb-2">Mã thành viên (User ID)</label>
+          <label className="block text-sm font-medium text-emerald-100 mb-2">{t("login.userId")}</label>
           <div className="relative">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
               <User className="h-5 w-5 text-emerald-300/70" />
@@ -49,14 +48,14 @@ export default function LoginForm() {
               value={userId}
               onChange={(e) => setUserId(e.target.value)}
               className="block w-full pl-10 pr-3 py-3 border border-white/10 rounded-xl leading-5 bg-white/5 text-white placeholder-white/30 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm transition-all"
-              placeholder="VD: CTNC-01"
+              placeholder={t("login.userId.placeholder")}
               required
             />
           </div>
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-emerald-100 mb-2">Mật khẩu</label>
+          <label className="block text-sm font-medium text-emerald-100 mb-2">{t("login.password")}</label>
           <div className="relative">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
               <Lock className="h-5 w-5 text-emerald-300/70" />
@@ -66,14 +65,14 @@ export default function LoginForm() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="block w-full pl-10 pr-3 py-3 border border-white/10 rounded-xl leading-5 bg-white/5 text-white placeholder-white/30 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm transition-all"
-              placeholder="••••••••"
+              placeholder={t("login.password.placeholder")}
               required
             />
           </div>
         </div>
 
         {error && (
-          <motion.p 
+          <motion.p
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
             className="text-red-400 text-sm bg-red-400/10 p-3 rounded-lg border border-red-400/20"
@@ -88,10 +87,10 @@ export default function LoginForm() {
           className="w-full flex justify-center items-center py-3 px-4 border border-transparent rounded-xl shadow-lg text-sm font-bold text-slate-900 bg-emerald-400 hover:bg-emerald-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 transition-colors disabled:opacity-70 disabled:cursor-not-allowed group"
         >
           {isLoading ? (
-            <Loader2 className="animate-spin h-5 w-5" />
+            <><Loader2 className="animate-spin h-5 w-5 mr-2" /> {t("login.loading")}</>
           ) : (
             <>
-              Đăng nhập
+              {t("login.submit")}
               <ArrowRight className="ml-2 h-4 w-4 group-hover:translate-x-1 transition-transform" />
             </>
           )}
@@ -104,13 +103,13 @@ export default function LoginForm() {
           onClick={() => setShowForgot(true)}
           className="text-emerald-300/70 hover:text-emerald-300 transition-colors underline underline-offset-2"
         >
-          Quên mật khẩu?
+          {t("login.forgotPassword")}
         </button>
         <button
           onClick={() => setShowSignup(true)}
           className="text-emerald-300/70 hover:text-emerald-300 transition-colors underline underline-offset-2"
         >
-          Đăng ký tài khoản
+          {t("login.signup")}
         </button>
       </div>
 
@@ -132,33 +131,24 @@ export default function LoginForm() {
               className="bg-slate-800 border border-white/10 rounded-3xl p-8 max-w-md w-full shadow-2xl relative"
               onClick={e => e.stopPropagation()}
             >
-              <button
-                onClick={() => setShowForgot(false)}
-                className="absolute top-4 right-4 p-2 rounded-full hover:bg-white/10 text-slate-400 hover:text-white transition-colors"
-              >
+              <button onClick={() => setShowForgot(false)} className="absolute top-4 right-4 p-2 rounded-full hover:bg-white/10 text-slate-400 hover:text-white transition-colors">
                 <X className="w-5 h-5" />
               </button>
               <div className="flex flex-col items-center text-center gap-4">
                 <div className="w-16 h-16 bg-emerald-500/20 rounded-full flex items-center justify-center">
                   <Mail className="w-8 h-8 text-emerald-400" />
                 </div>
-                <h3 className="text-xl font-bold text-white">Quên mật khẩu?</h3>
-                <p className="text-slate-400 text-sm leading-relaxed">
-                  Mật khẩu được quản lý bởi <strong className="text-emerald-300">Admin hệ thống CTNC</strong>.<br />
-                  Vui lòng liên hệ Admin để được đặt lại mật khẩu.
-                </p>
+                <h3 className="text-xl font-bold text-white">{t("forgot.title")}</h3>
+                <p className="text-slate-400 text-sm leading-relaxed">{t("forgot.desc")}</p>
                 <div className="w-full bg-slate-700/50 rounded-2xl p-4 text-left space-y-2">
-                  <p className="text-xs text-slate-400 uppercase tracking-widest font-semibold">Liên hệ Admin</p>
+                  <p className="text-xs text-slate-400 uppercase tracking-widest font-semibold">{t("forgot.contact")}</p>
                   <p className="text-white font-medium flex items-center gap-2">
                     <Mail className="w-4 h-4 text-emerald-400" />
                     minh.hoangvan@ctnc.org.vn
                   </p>
                 </div>
-                <button
-                  onClick={() => setShowForgot(false)}
-                  className="w-full py-3 bg-emerald-500 hover:bg-emerald-400 text-slate-900 font-bold rounded-xl transition-colors"
-                >
-                  Đã hiểu
+                <button onClick={() => setShowForgot(false)} className="w-full py-3 bg-emerald-500 hover:bg-emerald-400 text-slate-900 font-bold rounded-xl transition-colors">
+                  {t("forgot.understood")}
                 </button>
               </div>
             </motion.div>
@@ -184,38 +174,30 @@ export default function LoginForm() {
               className="bg-slate-800 border border-white/10 rounded-3xl p-8 max-w-md w-full shadow-2xl relative"
               onClick={e => e.stopPropagation()}
             >
-              <button
-                onClick={() => setShowSignup(false)}
-                className="absolute top-4 right-4 p-2 rounded-full hover:bg-white/10 text-slate-400 hover:text-white transition-colors"
-              >
+              <button onClick={() => setShowSignup(false)} className="absolute top-4 right-4 p-2 rounded-full hover:bg-white/10 text-slate-400 hover:text-white transition-colors">
                 <X className="w-5 h-5" />
               </button>
               <div className="flex flex-col items-center text-center gap-4">
                 <div className="w-16 h-16 bg-blue-500/20 rounded-full flex items-center justify-center">
                   <ShieldAlert className="w-8 h-8 text-blue-400" />
                 </div>
-                <h3 className="text-xl font-bold text-white">Đăng ký tài khoản mới</h3>
-                <p className="text-slate-400 text-sm leading-relaxed">
-                  Hệ thống CTNC Report sử dụng tài khoản được cấp phát bởi <strong className="text-blue-300">Admin</strong>. Người dùng không thể tự đăng ký.
-                </p>
+                <h3 className="text-xl font-bold text-white">{t("signup.title")}</h3>
+                <p className="text-slate-400 text-sm leading-relaxed">{t("signup.desc")}</p>
                 <div className="w-full bg-slate-700/50 rounded-2xl p-4 text-left space-y-3">
-                  <p className="text-xs text-slate-400 uppercase tracking-widest font-semibold">Yêu cầu cấp tài khoản</p>
-                  <p className="text-slate-300 text-sm">Gửi email đến Admin với nội dung:</p>
+                  <p className="text-xs text-slate-400 uppercase tracking-widest font-semibold">{t("signup.request")}</p>
+                  <p className="text-slate-300 text-sm">{t("signup.sendEmail")}</p>
                   <ul className="text-slate-400 text-sm space-y-1 list-disc list-inside">
-                    <li>Họ và tên đầy đủ</li>
-                    <li>Email công việc</li>
-                    <li>Khu vực phụ trách</li>
+                    <li>{t("signup.fullName")}</li>
+                    <li>{t("signup.workEmail")}</li>
+                    <li>{t("signup.area")}</li>
                   </ul>
                   <p className="text-white font-medium flex items-center gap-2 pt-1">
                     <Mail className="w-4 h-4 text-blue-400" />
                     minh.hoangvan@ctnc.org.vn
                   </p>
                 </div>
-                <button
-                  onClick={() => setShowSignup(false)}
-                  className="w-full py-3 bg-blue-500 hover:bg-blue-400 text-white font-bold rounded-xl transition-colors"
-                >
-                  Đã hiểu
+                <button onClick={() => setShowSignup(false)} className="w-full py-3 bg-blue-500 hover:bg-blue-400 text-white font-bold rounded-xl transition-colors">
+                  {t("signup.understood")}
                 </button>
               </div>
             </motion.div>
