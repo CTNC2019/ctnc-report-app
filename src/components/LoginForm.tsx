@@ -19,14 +19,23 @@ export default function LoginForm() {
     setIsLoading(true);
     setError("");
 
-    setTimeout(() => {
-      setIsLoading(false);
-      if (userId.toLowerCase() === "ctnc-01" && password === "12345678") {
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, password }),
+      });
+      const data = await res.json();
+      if (data.success) {
         window.location.href = "/dashboard";
       } else {
         setError(t("login.error"));
       }
-    }, 1500);
+    } catch {
+      setError(t("login.error"));
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (

@@ -1,8 +1,18 @@
-import { NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
+import { defineConfig, globalIgnores } from "eslint/config";
+import nextVitals from "eslint-config-next/core-web-vitals";
+import nextTs from "eslint-config-next/typescript";
 
-export async function GET() {
-  const user = await getSession();
-  if (!user) return NextResponse.json({ user: null }, { status: 401 });
-  return NextResponse.json({ user });
-}
+const eslintConfig = defineConfig([
+  ...nextVitals,
+  ...nextTs,
+  // Override default ignores of eslint-config-next.
+  globalIgnores([
+    // Default ignores of eslint-config-next:
+    ".next/**",
+    "out/**",
+    "build/**",
+    "next-env.d.ts",
+  ]),
+]);
+
+export default eslintConfig;

@@ -1,9 +1,5 @@
-import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { SESSION_COOKIE } from "@/lib/auth";
+<!-- BEGIN:nextjs-agent-rules -->
+# This is NOT the Next.js you know
 
-export async function POST() {
-  const store = await cookies();
-  store.delete(SESSION_COOKIE);
-  return NextResponse.json({ success: true });
-}
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing any code. Heed deprecation notices.
+<!-- END:nextjs-agent-rules -->
