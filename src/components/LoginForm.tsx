@@ -1,14 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import { motion } from "framer-motion";
-import { User, Lock, ArrowRight, Loader2 } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { User, Lock, ArrowRight, Loader2, X, Mail, ShieldAlert } from "lucide-react";
 
 export default function LoginForm() {
   const [userId, setUserId] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
+  const [showForgot, setShowForgot] = useState(false);
+  const [showSignup, setShowSignup] = useState(false);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -95,6 +97,131 @@ export default function LoginForm() {
           )}
         </button>
       </form>
+
+      {/* Links phía dưới form */}
+      <div className="mt-6 flex justify-between items-center text-sm">
+        <button
+          onClick={() => setShowForgot(true)}
+          className="text-emerald-300/70 hover:text-emerald-300 transition-colors underline underline-offset-2"
+        >
+          Quên mật khẩu?
+        </button>
+        <button
+          onClick={() => setShowSignup(true)}
+          className="text-emerald-300/70 hover:text-emerald-300 transition-colors underline underline-offset-2"
+        >
+          Đăng ký tài khoản
+        </button>
+      </div>
+
+      {/* Modal: Quên mật khẩu */}
+      <AnimatePresence>
+        {showForgot && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4"
+            onClick={() => setShowForgot(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              transition={{ type: "spring", stiffness: 300, damping: 25 }}
+              className="bg-slate-800 border border-white/10 rounded-3xl p-8 max-w-md w-full shadow-2xl relative"
+              onClick={e => e.stopPropagation()}
+            >
+              <button
+                onClick={() => setShowForgot(false)}
+                className="absolute top-4 right-4 p-2 rounded-full hover:bg-white/10 text-slate-400 hover:text-white transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+              <div className="flex flex-col items-center text-center gap-4">
+                <div className="w-16 h-16 bg-emerald-500/20 rounded-full flex items-center justify-center">
+                  <Mail className="w-8 h-8 text-emerald-400" />
+                </div>
+                <h3 className="text-xl font-bold text-white">Quên mật khẩu?</h3>
+                <p className="text-slate-400 text-sm leading-relaxed">
+                  Mật khẩu được quản lý bởi <strong className="text-emerald-300">Admin hệ thống CTNC</strong>.<br />
+                  Vui lòng liên hệ Admin để được đặt lại mật khẩu.
+                </p>
+                <div className="w-full bg-slate-700/50 rounded-2xl p-4 text-left space-y-2">
+                  <p className="text-xs text-slate-400 uppercase tracking-widest font-semibold">Liên hệ Admin</p>
+                  <p className="text-white font-medium flex items-center gap-2">
+                    <Mail className="w-4 h-4 text-emerald-400" />
+                    minh.hoangvan@ctnc.org.vn
+                  </p>
+                </div>
+                <button
+                  onClick={() => setShowForgot(false)}
+                  className="w-full py-3 bg-emerald-500 hover:bg-emerald-400 text-slate-900 font-bold rounded-xl transition-colors"
+                >
+                  Đã hiểu
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Modal: Đăng ký tài khoản */}
+      <AnimatePresence>
+        {showSignup && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4"
+            onClick={() => setShowSignup(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              transition={{ type: "spring", stiffness: 300, damping: 25 }}
+              className="bg-slate-800 border border-white/10 rounded-3xl p-8 max-w-md w-full shadow-2xl relative"
+              onClick={e => e.stopPropagation()}
+            >
+              <button
+                onClick={() => setShowSignup(false)}
+                className="absolute top-4 right-4 p-2 rounded-full hover:bg-white/10 text-slate-400 hover:text-white transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+              <div className="flex flex-col items-center text-center gap-4">
+                <div className="w-16 h-16 bg-blue-500/20 rounded-full flex items-center justify-center">
+                  <ShieldAlert className="w-8 h-8 text-blue-400" />
+                </div>
+                <h3 className="text-xl font-bold text-white">Đăng ký tài khoản mới</h3>
+                <p className="text-slate-400 text-sm leading-relaxed">
+                  Hệ thống CTNC Report sử dụng tài khoản được cấp phát bởi <strong className="text-blue-300">Admin</strong>. Người dùng không thể tự đăng ký.
+                </p>
+                <div className="w-full bg-slate-700/50 rounded-2xl p-4 text-left space-y-3">
+                  <p className="text-xs text-slate-400 uppercase tracking-widest font-semibold">Yêu cầu cấp tài khoản</p>
+                  <p className="text-slate-300 text-sm">Gửi email đến Admin với nội dung:</p>
+                  <ul className="text-slate-400 text-sm space-y-1 list-disc list-inside">
+                    <li>Họ và tên đầy đủ</li>
+                    <li>Email công việc</li>
+                    <li>Khu vực phụ trách</li>
+                  </ul>
+                  <p className="text-white font-medium flex items-center gap-2 pt-1">
+                    <Mail className="w-4 h-4 text-blue-400" />
+                    minh.hoangvan@ctnc.org.vn
+                  </p>
+                </div>
+                <button
+                  onClick={() => setShowSignup(false)}
+                  className="w-full py-3 bg-blue-500 hover:bg-blue-400 text-white font-bold rounded-xl transition-colors"
+                >
+                  Đã hiểu
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }
