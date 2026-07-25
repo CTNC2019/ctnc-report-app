@@ -2,23 +2,46 @@
 
 import { useEffect, useState, use as usePromise } from "react";
 import Link from "next/link";
-import { ArrowLeft, MapPin, FileText, AlertTriangle, CheckCircle, Undo2 } from "lucide-react";
+import { ArrowLeft, MapPin, FileText, AlertTriangle, CheckCircle, Undo2, Megaphone, ListChecks, CalendarClock } from "lucide-react";
 import Nav from "@/components/Nav";
 import { useLanguage } from "@/context/LanguageContext";
 import { useSession } from "@/hooks/useSession";
 
+type Activity = { activityType: string; desc: string };
+type SiteEntry = { siteCode: string; activities: Activity[]; results: string; plan: string; photos: { url: string; caption: string }[] };
 type ReportDetail = {
   id: string;
   userId: string;
   member: string;
   month: string;
   status: string;
-  siteUpdates: { siteCode: string; numActs: string; desc: string; results: string; plan: string }[];
+  sites: SiteEntry[];
   proposals: { name: string; status: string; deadline: string; note: string }[];
-  issues: { type: string; siteCode: string; description: string; pic: string; deadline: string }[];
+  reportItems: { itemName: string; typeCode: string; statusUpdate: string; deadlineAction: string }[];
+  comms: { channelCode: string; count: string; thisMonth: string; nextMonth: string }[];
+  issues: { siteCode: string; description: string; actionNeeded: string; pic: string }[];
+  priorities: { siteCode: string; activity: string; pic: string; deadline: string }[];
+  deadlines: { date: string; event: string; siteDonor: string; pic: string }[];
 };
 
-const PROP_STATUS: Record<string, string> = { S: "Successful", U: "Unsuccessful", W: "Writing", R: "Needs review" };
+const ACTIVITY_LABELS: Record<string, string> = {
+  SMART_TRAINING: "Tập huấn SMART",
+  SMART_REPORTING: "Báo cáo/phân tích SMART",
+  AWARENESS: "Nâng cao nhận thức",
+  MEETING: "Họp",
+  FIELD_SURVEY: "Khảo sát thực địa",
+  INTERVIEW: "Phỏng vấn",
+  OTHER: "Khác",
+};
+
+function Section({ icon, title, children }: { icon: React.ReactNode; title: string; children: React.ReactNode }) {
+  return (
+    <section className="mb-6">
+      <h2 className="text-lg font-bold text-white mb-3 flex items-center gap-2">{icon} {title}</h2>
+      {children}
+    </section>
+  );
+}
 
 export default function ReportView({ params }: { params: Promise<{ id: string }> }) {
   const { id } = usePromise(params);
@@ -67,77 +90,141 @@ export default function ReportView({ params }: { params: Promise<{ id: string }>
               </div>
               {isManager && report.status === "Submitted" && (
                 <div className="flex gap-2">
-                  <button
-                    disabled={busy}
-                    onClick={() => setStatus("Returned")}
-                    className="flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-300 text-sm font-medium disabled:opacity-50"
-                  >
+                  <button disabled={busy} onClick={() => setStatus("Returned")} className="flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-300 text-sm font-medium disabled:opacity-50">
                     <Undo2 className="w-4 h-4" /> {t("approve.return")}
                   </button>
-                  <button
-                    disabled={busy}
-                    onClick={() => setStatus("Approved")}
-                    className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-900 text-sm font-bold disabled:opacity-50"
-                  >
+                  <button disabled={busy} onClick={() => setStatus("Approved")} className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-900 text-sm font-bold disabled:opacity-50">
                     <CheckCircle className="w-4 h-4" /> {t("approve.approve")}
                   </button>
                 </div>
               )}
             </div>
 
-            <section className="mb-6">
-              <h2 className="text-lg font-bold text-white mb-3 flex items-center gap-2"><MapPin className="w-5 h-5 text-emerald-400" /> {t("form.step2")}</h2>
+            <Section icon={<MapPin className="w-5 h-5 text-emerald-400" />} title={t("form.step.sites")}>
               <div className="space-y-3">
-                {report.siteUpdates.map((s, i) => (
+                {report.sites.map((s, i) => (
                   <div key={i} className="p-4 bg-slate-800/50 border border-slate-700 rounded-xl">
-                    <div className="flex justify-between text-sm mb-1">
+                    <div className="flex justify-between text-sm mb-2">
                       <b className="text-white">{s.siteCode}</b>
-                      <span className="text-slate-400">{s.numActs} {t("form.numActs").toLowerCase()}</span>
+                      <span className="text-slate-400">{s.activities.length} hoạt động</span>
                     </div>
-                    {s.desc && <p className="text-sm text-slate-300">{s.desc}</p>}
+                    {s.activities.length > 0 && (
+                      <ul className="text-sm text-slate-300 list-disc list-inside space-y-0.5 mb-2">
+                        {s.activities.map((a, ai) => (
+                          <li key={ai}>
+                            <span className="text-emerald-300">{ACTIVITY_LABELS[a.activityType] || a.activityType}</span>
+                            {a.desc && ` — ${a.desc}`}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                     {s.results && <p className="text-xs text-slate-500 mt-1">{t("form.results")}: {s.results}</p>}
                     {s.plan && <p className="text-xs text-slate-500">{t("form.plan")}: {s.plan}</p>}
+                    {s.photos.length > 0 && (
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        {s.photos.map((p, pi) => (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img key={pi} src={p.url} alt={p.caption || "photo"} title={p.caption} className="w-16 h-16 object-cover rounded-lg border border-white/10" />
+                        ))}
+                      </div>
+                    )}
                   </div>
                 ))}
-                {report.siteUpdates.length === 0 && <p className="text-sm text-slate-500">{t("form.noItems")}</p>}
+                {report.sites.length === 0 && <p className="text-sm text-slate-500">{t("form.noItems")}</p>}
               </div>
-            </section>
+            </Section>
 
-            <section className="mb-6">
-              <h2 className="text-lg font-bold text-white mb-3 flex items-center gap-2"><FileText className="w-5 h-5 text-blue-400" /> {t("form.step3")}</h2>
+            <Section icon={<FileText className="w-5 h-5 text-blue-400" />} title={t("form.step.proposals")}>
               <div className="space-y-3">
                 {report.proposals.map((p, i) => (
                   <div key={i} className="p-4 bg-slate-800/50 border border-slate-700 rounded-xl">
                     <div className="flex justify-between text-sm">
                       <b className="text-white">{p.name}</b>
-                      <span className="text-xs px-2 py-0.5 rounded bg-slate-700 text-slate-300">{PROP_STATUS[p.status] || p.status}</span>
+                      <span className="text-xs px-2 py-0.5 rounded bg-slate-700 text-slate-300">{p.status}</span>
                     </div>
                     {p.note && <p className="text-sm text-slate-400 mt-1">{p.note}</p>}
                   </div>
                 ))}
                 {report.proposals.length === 0 && <p className="text-sm text-slate-500">{t("form.noItems")}</p>}
               </div>
-            </section>
+            </Section>
 
-            <section>
-              <h2 className="text-lg font-bold text-white mb-3 flex items-center gap-2"><AlertTriangle className="w-5 h-5 text-amber-400" /> {t("form.step4")}</h2>
+            <Section icon={<FileText className="w-5 h-5 text-purple-400" />} title={t("form.step.reportsdata")}>
+              <div className="space-y-3">
+                {report.reportItems.map((r, i) => (
+                  <div key={i} className="p-4 bg-slate-800/50 border border-slate-700 rounded-xl">
+                    <div className="flex justify-between text-sm">
+                      <b className="text-white">{r.itemName}</b>
+                      <span className="text-xs px-2 py-0.5 rounded bg-slate-700 text-slate-300">{r.typeCode}</span>
+                    </div>
+                    {r.statusUpdate && <p className="text-sm text-slate-400 mt-1">{r.statusUpdate}</p>}
+                    {r.deadlineAction && <p className="text-xs text-slate-500 mt-1">{r.deadlineAction}</p>}
+                  </div>
+                ))}
+                {report.reportItems.length === 0 && <p className="text-sm text-slate-500">{t("form.noItems")}</p>}
+              </div>
+            </Section>
+
+            <Section icon={<Megaphone className="w-5 h-5 text-pink-400" />} title={t("form.step.comms")}>
+              <div className="space-y-3">
+                {report.comms.filter((c) => Number(c.count) > 0 || c.thisMonth).map((c, i) => (
+                  <div key={i} className="p-4 bg-slate-800/50 border border-slate-700 rounded-xl">
+                    <div className="flex justify-between text-sm mb-1">
+                      <b className="text-white">{c.channelCode}</b>
+                      <span className="text-slate-400">{c.count}</span>
+                    </div>
+                    {c.thisMonth && <p className="text-sm text-slate-400">{c.thisMonth}</p>}
+                  </div>
+                ))}
+                {report.comms.every((c) => !(Number(c.count) > 0 || c.thisMonth)) && <p className="text-sm text-slate-500">{t("form.noItems")}</p>}
+              </div>
+            </Section>
+
+            <Section icon={<AlertTriangle className="w-5 h-5 text-amber-400" />} title={t("form.step.issues")}>
               <div className="space-y-3">
                 {report.issues.map((x, i) => (
                   <div key={i} className="p-4 bg-slate-800/50 border border-slate-700 rounded-xl">
-                    <div className="flex justify-between text-sm">
-                      <b className="text-white">{x.description}</b>
-                      <span className="text-xs px-2 py-0.5 rounded bg-slate-700 text-slate-300">
-                        {x.type === "Priority" ? t("form.issueType.priority") : t("form.issueType.issue")}
-                      </span>
-                    </div>
+                    <b className="text-white text-sm">{x.description}</b>
                     <p className="text-xs text-slate-500 mt-1">
-                      {x.siteCode && `${x.siteCode} · `}{x.pic && `${t("form.issuePic")}: ${x.pic} · `}{x.deadline}
+                      {x.siteCode && `${x.siteCode} · `}{x.pic && `${t("form.issuePic")}: ${x.pic} · `}{x.actionNeeded}
                     </p>
                   </div>
                 ))}
                 {report.issues.length === 0 && <p className="text-sm text-slate-500">{t("form.noItems")}</p>}
               </div>
-            </section>
+            </Section>
+
+            <Section icon={<ListChecks className="w-5 h-5 text-emerald-400" />} title={t("form.step.priorities")}>
+              <div className="space-y-3">
+                {report.priorities.map((x, i) => (
+                  <div key={i} className="p-4 bg-slate-800/50 border border-slate-700 rounded-xl">
+                    <div className="flex gap-2 items-start">
+                      <span className="w-6 h-6 shrink-0 rounded-full bg-emerald-500 text-slate-900 text-xs font-bold flex items-center justify-center">{i + 1}</span>
+                      <div>
+                        <b className="text-white text-sm">{x.activity}</b>
+                        <p className="text-xs text-slate-500 mt-1">{x.siteCode && `${x.siteCode} · `}{x.pic && `${x.pic} · `}{x.deadline}</p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                {report.priorities.length === 0 && <p className="text-sm text-slate-500">{t("form.noItems")}</p>}
+              </div>
+            </Section>
+
+            <Section icon={<CalendarClock className="w-5 h-5 text-sky-400" />} title={t("form.step.deadlines")}>
+              <div className="space-y-3">
+                {report.deadlines.map((x, i) => (
+                  <div key={i} className="p-4 bg-slate-800/50 border border-slate-700 rounded-xl">
+                    <div className="flex justify-between text-sm">
+                      <b className="text-white">{x.event}</b>
+                      <span className="text-slate-400">{x.date}</span>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-1">{x.siteDonor && `${x.siteDonor} · `}{x.pic}</p>
+                  </div>
+                ))}
+                {report.deadlines.length === 0 && <p className="text-sm text-slate-500">{t("form.noItems")}</p>}
+              </div>
+            </Section>
           </div>
         )}
       </main>

@@ -15,6 +15,50 @@ export const SITES = [
   { code: "CD", vi: "VQG Côn Đảo", en: "Con Dao National Park" },
 ];
 
+// Structured activity types, mirroring the wording in the CTNC monthly report template
+// ("SMART training or reporting, awareness raising, meetings, field surveys or interview surveys").
+export const ACTIVITY_TYPES = [
+  { code: "SMART_TRAINING", vi: "Tập huấn SMART", en: "SMART training" },
+  { code: "SMART_REPORTING", vi: "Báo cáo/phân tích SMART", en: "SMART reporting" },
+  { code: "AWARENESS", vi: "Nâng cao nhận thức", en: "Awareness raising" },
+  { code: "MEETING", vi: "Họp", en: "Meeting" },
+  { code: "FIELD_SURVEY", vi: "Khảo sát thực địa", en: "Field survey" },
+  { code: "INTERVIEW", vi: "Phỏng vấn", en: "Interview survey" },
+  { code: "OTHER", vi: "Khác", en: "Other" },
+];
+
+// Report/data-update item types (Section 3 of the template).
+export const REPORT_TYPES = [
+  { code: "Annual", vi: "Hàng năm", en: "Annual" },
+  { code: "Quarterly", vi: "Hàng quý", en: "Quarterly" },
+  { code: "Donor", vi: "Báo cáo donor", en: "Donor" },
+  { code: "SMART", vi: "SMART", en: "SMART" },
+  { code: "Other", vi: "Khác", en: "Other" },
+];
+
+// Fixed communication channels (Section 4 of the template) — order matches the template rows.
+export const COMM_CHANNELS = [
+  { code: "Donor communication", vi: "Truyền thông với donor", en: "Donor communication" },
+  { code: "Facebook", vi: "Facebook", en: "Facebook" },
+  { code: "Website", vi: "Website", en: "Website" },
+  { code: "Monthly newsletter", vi: "Bản tin hàng tháng", en: "Monthly newsletter" },
+  { code: "Other platforms / media", vi: "Kênh/nền tảng khác", en: "Other platforms / media" },
+];
+
+// Proposal status wording — matches the template exactly ("successful/unsuccessful/writing/needs review").
+export const PROPOSAL_STATUSES = [
+  { code: "Successful", vi: "Thành công", en: "Successful" },
+  { code: "Unsuccessful", vi: "Không thành công", en: "Unsuccessful" },
+  { code: "Writing", vi: "Đang xây dựng", en: "Writing" },
+  { code: "Needs review", vi: "Cần rà soát", en: "Needs review" },
+];
+
+export function labelOf(list: { code: string; vi: string; en: string }[], code: string, lang: "vi" | "en" = "vi") {
+  const item = list.find((x) => x.code === code);
+  if (!item) return code;
+  return lang === "vi" ? item.vi : item.en;
+}
+
 type Row = Record<string, string>;
 
 let sheetsClientPromise: ReturnType<typeof buildClient> | null = null;

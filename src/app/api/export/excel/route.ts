@@ -34,7 +34,10 @@ export async function GET(request: Request) {
     ["Tỷ lệ hoàn thành (%)", data.kpi.completionRate],
     ["Đang chờ duyệt", data.kpi.pendingApprovals],
     ["Tổng hoạt động", data.kpi.activitiesCompleted],
+    ["Đề xuất đang triển khai", data.kpi.activeProposals],
+    ["Sản phẩm truyền thông", data.kpi.commsOutputs],
     ["Vấn đề cần hỗ trợ", data.kpi.issuesNeedingSupport],
+    ["Ưu tiên đặt ra cho tháng tới", data.kpi.prioritiesSetThisMonth],
   ]);
   XLSX.utils.book_append_sheet(wb, overviewSheet, "Tong_Quan");
 
@@ -50,17 +53,34 @@ export async function GET(request: Request) {
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(memberRows), "Thanh_Vien");
 
   const siteRows = data.siteStats.map((s) => ({ "Mã khu vực": s.code, "Tên khu vực": s.name, "Tổng hoạt động": s.totalActs }));
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(siteRows), "Hoat_Dong_Tong_Hop");
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(siteRows), "Hoat_Dong_Theo_Khu_Vuc");
 
-  const siteDetailRows = raw.siteUpdates.map((s) => ({
-    "Mã báo cáo": s.reportId,
-    "Thành viên": s.member,
-    "Khu vực": s.siteName,
-    "Số hoạt động": s.numActs,
-    "Mô tả": s.desc,
-    "Kết quả & khó khăn": s.results,
-    "Kế hoạch tháng tới": s.plan,
-  }));
+  const typeRows = data.typeStats.map((t) => ({ "Loại hoạt động": t.label, "Số lượng": t.count }));
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(typeRows), "Hoat_Dong_Theo_Loai");
+
+  const siteDetailRows = raw.siteUpdates.flatMap((s) =>
+    s.activitiesList.length
+      ? s.activitiesList.map((a) => ({
+          "Mã báo cáo": s.reportId,
+          "Thành viên": s.member,
+          "Khu vực": s.siteName,
+          "Loại hoạt động": a.typeLabel,
+          "Mô tả": a.desc,
+          "Kết quả & khó khăn": s.results,
+          "Kế hoạch tháng tới": s.plan,
+        }))
+      : [
+          {
+            "Mã báo cáo": s.reportId,
+            "Thành viên": s.member,
+            "Khu vực": s.siteName,
+            "Loại hoạt động": "",
+            "Mô tả": s.desc,
+            "Kết quả & khó khăn": s.results,
+            "Kế hoạch tháng tới": s.plan,
+          },
+        ]
+  );
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(siteDetailRows), "Chi_Tiet_Hoat_Dong");
 
   const proposalRows = raw.proposals.map((p) => ({
@@ -73,18 +93,56 @@ export async function GET(request: Request) {
   }));
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(proposalRows), "De_Xuat");
 
-  const issueRows = raw.issues
-    .concat()
-    .map((i) => ({
-      "Mã báo cáo": i.reportId,
-      "Thành viên": i.member,
-      "Loại": i.type === "Priority" ? "Ưu tiên tháng tới" : "Vấn đề",
-      "Khu vực": i.siteCode,
-      "Mô tả": i.description,
-      "Người phụ trách": i.pic,
-      "Hạn chót": i.deadline,
-    }));
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(issueRows), "Van_De_Uu_Tien");
+  const reportsDataRows = raw.reportsData.map((r) => ({
+    "Mã báo cáo": r.reportId,
+    "Thành viên": r.member,
+    "Báo cáo / bộ dữ liệu": r.itemName,
+    "Loại": r.typeLabel,
+    "Tiến độ / cập nhật": r.statusUpdate,
+    "Hạn chót & hành động": r.deadlineAction,
+  }));
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(reportsDataRows), "Bao_Cao_Cap_Nhat");
+
+  const commRows = raw.comms.map((c) => ({
+    "Mã báo cáo": c.reportId,
+    "Thành viên": c.member,
+    "Kênh": c.channelLabel,
+    "SL hoàn thành": c.numCompleted,
+    "Diễn ra trong tháng": c.thisMonth,
+    "Kế hoạch tháng tới": c.nextMonth,
+  }));
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(commRows), "Truyen_Thong");
+
+  const issueRows = raw.issues.map((i) => ({
+    "Mã báo cáo": i.reportId,
+    "Thành viên": i.member,
+    "Vấn đề": i.description,
+    "Khu vực": i.siteCode,
+    "Hành động cần thiết": i.actionNeeded,
+    "Người phụ trách": i.pic,
+  }));
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(issueRows), "Van_De");
+
+  const priorityRows = raw.priorities.map((p) => ({
+    "Mã báo cáo": p.reportId,
+    "Thành viên": p.member,
+    "Ưu tiên": p.priorityNo,
+    "Khu vực": p.siteCode,
+    "Hoạt động dự kiến": p.activity,
+    "Người phụ trách": p.pic,
+    "Hạn chót": p.deadline,
+  }));
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(priorityRows), "Uu_Tien");
+
+  const deadlineRows = raw.deadlines.map((d) => ({
+    "Mã báo cáo": d.reportId,
+    "Thành viên": d.member,
+    "Ngày": d.date,
+    "Deadline / sự kiện": d.event,
+    "Khu vực / Donor": d.siteDonor,
+    "Người phụ trách": d.pic,
+  }));
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(deadlineRows), "Deadline");
 
   const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
   const filename = `CTNC_BaoCao_${data.month.replace("/", "-")}.xlsx`;

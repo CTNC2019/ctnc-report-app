@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSession, isManager } from "@/lib/auth";
 import { appendObjects, deleteRowsByKey, readObjects, updateObjectByKey } from "@/lib/sheets";
+import { stringifyPhotos, type PhotoItem } from "@/lib/reportData";
 
 export const runtime = "nodejs";
 
@@ -34,9 +35,14 @@ export async function GET() {
   return NextResponse.json({ reports: list });
 }
 
-type SiteUpdateIn = { siteCode: string; numActs?: number | string; desc?: string; results?: string; plan?: string };
+type ActivityIn = { activityType: string; desc?: string };
+type SiteIn = { siteCode: string; activities?: ActivityIn[]; results?: string; plan?: string; photos?: PhotoItem[] };
 type ProposalIn = { name: string; status?: string; deadline?: string; note?: string };
-type IssueIn = { type?: string; siteCode?: string; description: string; pic?: string; deadline?: string };
+type ReportItemIn = { itemName: string; typeCode?: string; statusUpdate?: string; deadlineAction?: string };
+type CommIn = { channelCode: string; count?: number | string; thisMonth?: string; nextMonth?: string };
+type IssueIn = { siteCode?: string; description: string; actionNeeded?: string; pic?: string };
+type PriorityIn = { priorityNo?: number; siteCode?: string; activity: string; pic?: string; deadline?: string };
+type DeadlineIn = { date?: string; event: string; siteDonor?: string; pic?: string };
 
 export async function POST(request: Request) {
   const me = await getSession();
@@ -72,26 +78,43 @@ export async function POST(request: Request) {
     await appendObjects("Fact_Reports", [reportRow]);
   }
 
-  // Replace child rows wholesale so edits behave predictably.
-  await deleteRowsByKey("Data_Site_Updates", "Report_ID", reportId);
-  await deleteRowsByKey("Data_Proposals", "Report_ID", reportId);
-  await deleteRowsByKey("Data_Issues_Priorities", "Report_ID", reportId);
+  // Replace all child rows wholesale so edits behave predictably.
+  await Promise.all([
+    deleteRowsByKey("Data_Site_Updates", "Report_ID", reportId),
+    deleteRowsByKey("Data_Activities", "Report_ID", reportId),
+    deleteRowsByKey("Data_Proposals", "Report_ID", reportId),
+    deleteRowsByKey("Data_Reports_Data", "Report_ID", reportId),
+    deleteRowsByKey("Data_Communications", "Report_ID", reportId),
+    deleteRowsByKey("Data_Challenges", "Report_ID", reportId),
+    deleteRowsByKey("Data_Priorities", "Report_ID", reportId),
+    deleteRowsByKey("Data_Deadlines", "Report_ID", reportId),
+  ]);
 
-  const siteUpdates: SiteUpdateIn[] = body.siteUpdates || [];
-  if (siteUpdates.length) {
-    await appendObjects(
-      "Data_Site_Updates",
-      siteUpdates.map((s, i) => ({
-        Update_ID: `${reportId}-${s.siteCode}-${i}`,
-        Report_ID: reportId,
-        Site_Code: s.siteCode,
-        Num_Acts: String(s.numActs ?? 0),
-        Activities_Notes: s.desc || "",
-        Results_Challenges: s.results || "",
-        Next_Month_Plan: s.plan || "",
-      }))
-    );
-  }
+  const sites: SiteIn[] = body.sites || [];
+  const siteUpdateRows = sites
+    .filter((s) => (s.activities && s.activities.length) || s.results || s.plan || (s.photos && s.photos.length))
+    .map((s) => ({
+      Update_ID: `${reportId}-${s.siteCode}`,
+      Report_ID: reportId,
+      Site_Code: s.siteCode,
+      Num_Acts: String((s.activities || []).length),
+      Activities_Notes: (s.activities || []).map((a) => a.desc).filter(Boolean).join("; "),
+      Results_Challenges: s.results || "",
+      Next_Month_Plan: s.plan || "",
+      Photos_JSON: stringifyPhotos(s.photos || []),
+    }));
+  if (siteUpdateRows.length) await appendObjects("Data_Site_Updates", siteUpdateRows);
+
+  const activityRows = sites.flatMap((s, si) =>
+    (s.activities || []).map((a, ai) => ({
+      Activity_ID: `${reportId}-${s.siteCode}-${si}-${ai}`,
+      Report_ID: reportId,
+      Site_Code: s.siteCode,
+      Activity_Type: a.activityType || "OTHER",
+      Activity_Desc: a.desc || "",
+    }))
+  );
+  if (activityRows.length) await appendObjects("Data_Activities", activityRows);
 
   const proposals: ProposalIn[] = body.proposals || [];
   if (proposals.length) {
@@ -101,7 +124,7 @@ export async function POST(request: Request) {
         Prop_ID: `P${reportId}-${i}`,
         Report_ID: reportId,
         Proposal_Name: p.name || "",
-        Status_Code: p.status || "W",
+        Status_Code: p.status || "Writing",
         Deadline: p.deadline || "",
         Short_Note: p.note || "",
         Note: p.note || "",
@@ -109,18 +132,76 @@ export async function POST(request: Request) {
     );
   }
 
+  const reportItems: ReportItemIn[] = body.reportItems || [];
+  if (reportItems.length) {
+    await appendObjects(
+      "Data_Reports_Data",
+      reportItems.map((r, i) => ({
+        RD_ID: `RD${reportId}-${i}`,
+        Report_ID: reportId,
+        Item_Name: r.itemName || "",
+        Type_Code: r.typeCode || "Other",
+        Status_Update: r.statusUpdate || "",
+        Deadline_Action: r.deadlineAction || "",
+      }))
+    );
+  }
+
+  const comms: CommIn[] = body.comms || [];
+  const commRows = comms
+    .filter((c) => (c.count && Number(c.count) > 0) || c.thisMonth || c.nextMonth)
+    .map((c, i) => ({
+      Comm_ID: `C${reportId}-${i}`,
+      Report_ID: reportId,
+      Channel_Code: c.channelCode,
+      Num_Completed: String(c.count ?? 0),
+      This_Month: c.thisMonth || "",
+      Next_Month: c.nextMonth || "",
+    }));
+  if (commRows.length) await appendObjects("Data_Communications", commRows);
+
   const issues: IssueIn[] = body.issues || [];
   if (issues.length) {
     await appendObjects(
-      "Data_Issues_Priorities",
+      "Data_Challenges",
       issues.map((x, i) => ({
-        Task_ID: `T${reportId}-${i}`,
+        Issue_ID: `I${reportId}-${i}`,
         Report_ID: reportId,
-        Type: x.type || "Issue",
-        Site_Code: x.siteCode || "",
-        Description: x.description || "",
-        PIC: x.pic || "",
-        Deadline: x.deadline || "",
+        Issue_Desc: x.description || "",
+        Site_Area: x.siteCode || "",
+        Action_Needed: x.actionNeeded || "",
+        Responsible: x.pic || "",
+      }))
+    );
+  }
+
+  const priorities: PriorityIn[] = body.priorities || [];
+  if (priorities.length) {
+    await appendObjects(
+      "Data_Priorities",
+      priorities.map((p, i) => ({
+        Pri_ID: `PR${reportId}-${i}`,
+        Report_ID: reportId,
+        Priority_No: String(p.priorityNo ?? i + 1),
+        Site_Area: p.siteCode || "",
+        Planned_Activity: p.activity || "",
+        Responsible: p.pic || "",
+        Deadline: p.deadline || "",
+      }))
+    );
+  }
+
+  const deadlines: DeadlineIn[] = body.deadlines || [];
+  if (deadlines.length) {
+    await appendObjects(
+      "Data_Deadlines",
+      deadlines.map((d, i) => ({
+        DL_ID: `DL${reportId}-${i}`,
+        Report_ID: reportId,
+        Event_Date: d.date || "",
+        Event_Desc: d.event || "",
+        Site_Donor: d.siteDonor || "",
+        Responsible: d.pic || "",
       }))
     );
   }
