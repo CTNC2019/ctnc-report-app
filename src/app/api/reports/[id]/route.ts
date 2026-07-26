@@ -1,7 +1,21 @@
 import { NextResponse } from "next/server";
-import { getSession, isManager } from "@/lib/auth";
-import { readObjects } from "@/lib/sheets";
+import { getSession, isAdmin, isManager } from "@/lib/auth";
+import { deleteRowsByKey, readObjects } from "@/lib/sheets";
 import { parsePhotos } from "@/lib/reportData";
+
+// Child tables that store rows keyed by Report_ID. Deleting a report wipes the parent
+// row in Fact_Reports plus every child row across these tabs so no orphaned data remains.
+const CHILD_TABLES = [
+  "Data_Site_Updates",
+  "Data_Activities",
+  "Data_Proposals",
+  "Data_Reports_Data",
+  "Data_Communications",
+  "Data_Challenges",
+  "Data_Priorities",
+  "Data_Deadlines",
+  "Data_Comments",
+];
 
 export const runtime = "nodejs";
 
@@ -72,4 +86,32 @@ export async function GET(_request: Request, ctx: { params: Promise<{ id: string
         .map((x) => ({ date: x.Event_Date, event: x.Event_Desc, siteDonor: x.Site_Donor, pic: x.Responsible })),
     },
   });
+}
+
+// Delete rules: the owner may delete their own report only while it is still a Draft
+// (nothing has been submitted for review yet, so nothing to lose). Once a report has
+// been Submitted/Approved/Returned, only an Admin can remove it — this preserves the
+// audit trail for reports that a Manager has already seen or approved.
+export async function DELETE(_request: Request, ctx: { params: Promise<{ id: string }> }) {
+  const me = await getSession();
+  if (!me) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const { id } = await ctx.params;
+
+  const reports = await readObjects("Fact_Reports");
+  const report = reports.find((r) => r.Report_ID === id);
+  if (!report) return NextResponse.json({ error: "not found" }, { status: 404 });
+
+  const status = report.Status || "Draft";
+  const isOwner = report.User_ID === me.id;
+  const canDelete = isAdmin(me) || (isOwner && status === "Draft");
+  if (!canDelete) {
+    return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  }
+
+  await Promise.all([
+    deleteRowsByKey("Fact_Reports", "Report_ID", id),
+    ...CHILD_TABLES.map((table) => deleteRowsByKey(table, "Report_ID", id)),
+  ]);
+
+  return NextResponse.json({ success: true });
 }

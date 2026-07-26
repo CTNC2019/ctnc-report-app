@@ -1,13 +1,9 @@
 import {
   readObjects,
-  SITES,
   nowMonth,
   siteName,
-  ACTIVITY_TYPES,
-  REPORT_TYPES,
-  COMM_CHANNELS,
-  PROPOSAL_STATUSES,
   labelOf,
+  getMasterData,
 } from "@/lib/sheets";
 
 export type PhotoItem = { url: string; caption: string };
@@ -148,6 +144,7 @@ export async function getFullDashboardData(month?: string): Promise<DashboardDat
     challengesRaw,
     prioritiesRaw,
     deadlinesRaw,
+    masterData,
   ] = await Promise.all([
     readObjects("Dim_Users"),
     readObjects("Fact_Reports"),
@@ -159,7 +156,9 @@ export async function getFullDashboardData(month?: string): Promise<DashboardDat
     readObjects("Data_Challenges"),
     readObjects("Data_Priorities"),
     readObjects("Data_Deadlines"),
+    getMasterData(),
   ]);
+  const { sites: SITES, activityTypes: ACTIVITY_TYPES, commChannels: COMM_CHANNELS, proposalStatuses: PROPOSAL_STATUSES, reportTypes: REPORT_TYPES } = masterData;
 
   const activeUsers = users.filter((u) => (u.Is_Active ?? "true").trim().toLowerCase() !== "false");
 
@@ -389,7 +388,7 @@ export async function getMonthRawRows(month: string): Promise<{
   reportsData: RawReportsData[];
   comms: RawComm[];
 }> {
-  const [users, reports, siteUpdatesAll, activitiesAll, proposalsAll, challengesAll, prioritiesAll, deadlinesAll, reportsDataAll, commsAll] =
+  const [users, reports, siteUpdatesAll, activitiesAll, proposalsAll, challengesAll, prioritiesAll, deadlinesAll, reportsDataAll, commsAll, masterData] =
     await Promise.all([
       readObjects("Dim_Users"),
       readObjects("Fact_Reports"),
@@ -401,7 +400,9 @@ export async function getMonthRawRows(month: string): Promise<{
       readObjects("Data_Deadlines"),
       readObjects("Data_Reports_Data"),
       readObjects("Data_Communications"),
+      getMasterData(),
     ]);
+  const { sites, activityTypes: ACTIVITY_TYPES, commChannels: COMM_CHANNELS, proposalStatuses: PROPOSAL_STATUSES, reportTypes: REPORT_TYPES } = masterData;
   const nameOf = (uid: string) => users.find((u) => u.User_ID === uid)?.Full_Name || uid;
   const monthReports = reports.filter((r) => r.Reporting_Month === month);
   const idToMember = new Map(monthReports.map((r) => [r.Report_ID, nameOf(r.User_ID)]));
@@ -417,7 +418,7 @@ export async function getMonthRawRows(month: string): Promise<{
         reportId: s.Report_ID,
         member: idToMember.get(s.Report_ID) || "",
         siteCode: s.Site_Code,
-        siteName: siteName(s.Site_Code, "vi"),
+        siteName: siteName(sites, s.Site_Code, "vi"),
         numActs: activitiesList.length || parseInt(s.Num_Acts, 10) || 0,
         activitiesList,
         desc: s.Activities_Notes,

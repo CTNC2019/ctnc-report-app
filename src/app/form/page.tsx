@@ -8,49 +8,18 @@ import Link from "next/link";
 import { useLanguage } from "@/context/LanguageContext";
 import { useSession } from "@/hooks/useSession";
 
-const SITES = [
-  { code: "TH", vi: "Rừng phòng hộ Tây Hòa", en: "Tay Hoa Protection Forest" },
-  { code: "SH", vi: "Rừng phòng hộ Sông Hinh", en: "Song Hinh Protection Forest" },
-  { code: "DC", vi: "Rừng đặc dụng Đèo Cả", en: "Deo Ca Special-use Forest" },
-  { code: "VP", vi: "Rừng phòng hộ Núi Vọng Phu", en: "Nui Vong Phu Protection Forest" },
-  { code: "ES", vi: "Khu BTTN Ea Sô", en: "Ea So Nature Reserve" },
-  { code: "NV", vi: "RPH Ninh Hòa – Vạn Ninh", en: "Ninh Hoa Van Ninh Protection Forest" },
-  { code: "BH", vi: "Khu BTTN Bắc Hải Vân", en: "Bac Hai Van Nature Reserve" },
-  { code: "CD", vi: "VQG Côn Đảo", en: "Con Dao National Park" },
-];
-
-const ACTIVITY_TYPES = [
-  { code: "SMART_TRAINING", vi: "Tập huấn SMART", en: "SMART training" },
-  { code: "SMART_REPORTING", vi: "Báo cáo/phân tích SMART", en: "SMART reporting" },
-  { code: "AWARENESS", vi: "Nâng cao nhận thức", en: "Awareness raising" },
-  { code: "MEETING", vi: "Họp", en: "Meeting" },
-  { code: "FIELD_SURVEY", vi: "Khảo sát thực địa", en: "Field survey" },
-  { code: "INTERVIEW", vi: "Phỏng vấn", en: "Interview survey" },
-  { code: "OTHER", vi: "Khác", en: "Other" },
-];
-
-const REPORT_TYPES = [
-  { code: "Annual", vi: "Hàng năm", en: "Annual" },
-  { code: "Quarterly", vi: "Hàng quý", en: "Quarterly" },
-  { code: "Donor", vi: "Báo cáo donor", en: "Donor" },
-  { code: "SMART", vi: "SMART", en: "SMART" },
-  { code: "Other", vi: "Khác", en: "Other" },
-];
-
-const COMM_CHANNELS = [
-  { code: "Donor communication", vi: "Truyền thông với donor", en: "Donor communication" },
-  { code: "Facebook", vi: "Facebook", en: "Facebook" },
-  { code: "Website", vi: "Website", en: "Website" },
-  { code: "Monthly newsletter", vi: "Bản tin hàng tháng", en: "Monthly newsletter" },
-  { code: "Other platforms / media", vi: "Kênh/nền tảng khác", en: "Other platforms / media" },
-];
-
-const PROPOSAL_STATUSES = [
-  { code: "Successful", vi: "Thành công", en: "Successful" },
-  { code: "Unsuccessful", vi: "Không thành công", en: "Unsuccessful" },
-  { code: "Writing", vi: "Đang xây dựng", en: "Writing" },
-  { code: "Needs review", vi: "Cần rà soát", en: "Needs review" },
-];
+// Dropdown labels (sites, activity types...) are sheet-driven: fetched from
+// /api/master-data (which reads the "Master_Data" Google Sheet tab) instead of being
+// hardcoded here. See MasterData state + the loading effect below. sheets.ts on the
+// server holds the built-in fallback wording used if that sheet tab isn't set up yet.
+type MasterItem = { code: string; vi: string; en: string };
+type MasterData = {
+  sites: MasterItem[];
+  activityTypes: MasterItem[];
+  reportTypes: MasterItem[];
+  commChannels: MasterItem[];
+  proposalStatuses: MasterItem[];
+};
 
 type Photo = { url: string; caption: string };
 type Activity = { key: number; activityType: string; desc: string };
@@ -70,11 +39,11 @@ function nowMonth() {
   return String(d.getMonth() + 1).padStart(2, "0") + "/" + d.getFullYear();
 }
 
-function emptySites(): SiteEntry[] {
-  return SITES.map((s) => ({ siteCode: s.code, activities: [], results: "", plan: "", photos: [] }));
+function emptySites(sites: MasterItem[]): SiteEntry[] {
+  return sites.map((s) => ({ siteCode: s.code, activities: [], results: "", plan: "", photos: [] }));
 }
-function emptyComms(): CommEntry[] {
-  return COMM_CHANNELS.map((c) => ({ channelCode: c.code, count: "", thisMonth: "", nextMonth: "" }));
+function emptyComms(channels: MasterItem[]): CommEntry[] {
+  return channels.map((c) => ({ channelCode: c.code, count: "", thisMonth: "", nextMonth: "" }));
 }
 
 const inputCls = "w-full px-4 py-3 bg-slate-900 border border-white/10 rounded-xl text-white focus:ring-2 focus:ring-emerald-500 focus:outline-none";
@@ -91,22 +60,42 @@ function FormInner() {
   const [currentStep, setCurrentStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [done, setDone] = useState(false);
-  const [loaded, setLoaded] = useState(!editId);
+  const [loaded, setLoaded] = useState(false);
+  const [masterData, setMasterData] = useState<MasterData | null>(null);
   const [month, setMonth] = useState(nowMonth());
   const [activeSite, setActiveSite] = useState(0);
 
-  const [sites, setSites] = useState<SiteEntry[]>(emptySites());
+  const [sites, setSites] = useState<SiteEntry[]>([]);
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [reportItems, setReportItems] = useState<ReportDataItem[]>([]);
-  const [comms, setComms] = useState<CommEntry[]>(emptyComms());
+  const [comms, setComms] = useState<CommEntry[]>([]);
   const [issues, setIssues] = useState<IssueItem[]>([]);
   const [priorities, setPriorities] = useState<PriorityItem[]>([]);
   const [deadlines, setDeadlines] = useState<DeadlineItem[]>([]);
   const [uploadingFor, setUploadingFor] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
+  // Sheet-driven labels must arrive before the form can render (site tabs, activity
+  // type dropdowns, etc. are all built from this). For a brand-new report, seed the
+  // site tabs + fixed comm channels as soon as it arrives; editing an existing report
+  // is handled by the next effect once both editId's fetch and masterData are ready.
   useEffect(() => {
-    if (!editId) return;
+    fetch("/api/master-data")
+      .then((r) => r.json())
+      .then((d: MasterData) => {
+        setMasterData(d);
+        if (!editId) {
+          setSites(emptySites(d.sites));
+          setComms(emptyComms(d.commChannels));
+          setLoaded(true);
+        }
+      });
+  }, [editId]);
+
+  // Edit an existing report: wait for master data too, so unfilled sites/channels are
+  // still seeded correctly alongside whatever the report already has saved.
+  useEffect(() => {
+    if (!editId || !masterData) return;
     fetch(`/api/reports/${editId}`)
       .then((r) => r.json())
       .then((d) => {
@@ -115,23 +104,26 @@ function FormInner() {
         setMonth(rep.month || nowMonth());
         if (rep.sites?.length) {
           setSites(
-            SITES.map((s) => {
+            masterData.sites.map((s) => {
               const found = rep.sites.find((x: SiteEntry) => x.siteCode === s.code);
               return found
                 ? { ...found, activities: (found.activities || []).map((a: Activity) => ({ ...a, key: nextKey() })) }
                 : { siteCode: s.code, activities: [], results: "", plan: "", photos: [] };
             })
           );
+        } else {
+          setSites(emptySites(masterData.sites));
         }
         setProposals((rep.proposals || []).map((p: Proposal) => ({ ...p, key: nextKey() })));
         setReportItems((rep.reportItems || []).map((x: ReportDataItem) => ({ ...x, key: nextKey() })));
         if (rep.comms?.length) setComms(rep.comms);
+        else setComms(emptyComms(masterData.commChannels));
         setIssues((rep.issues || []).map((x: IssueItem) => ({ ...x, key: nextKey() })));
         setPriorities((rep.priorities || []).map((x: PriorityItem) => ({ ...x, key: nextKey() })));
         setDeadlines((rep.deadlines || []).map((x: DeadlineItem) => ({ ...x, key: nextKey() })));
         setLoaded(true);
       });
-  }, [editId]);
+  }, [editId, masterData]);
 
   const reportId = user ? `${user.id}-${month.replace("/", "")}` : "…";
   const stepTitles = [
@@ -236,12 +228,12 @@ function FormInner() {
     }
   }
 
-  if (!loaded) {
+  if (!loaded || !masterData) {
     return <div className="min-h-screen bg-slate-900 flex items-center justify-center text-slate-400">{t("common.loading")}</div>;
   }
 
   const site = sites[activeSite];
-  const siteMeta = SITES[activeSite];
+  const siteMeta = masterData.sites[activeSite];
 
   return (
     <div className="min-h-screen bg-slate-900 text-slate-200 p-4 sm:p-8">
@@ -292,7 +284,7 @@ function FormInner() {
               <motion.div key="s2" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-6">
                 <h2 className="text-2xl font-bold text-white mb-2">{t("form.step.sites")}</h2>
                 <div className="flex flex-wrap gap-2">
-                  {SITES.map((s, i) => (
+                  {masterData.sites.map((s, i) => (
                     <button
                       key={s.code}
                       onClick={() => setActiveSite(i)}
@@ -324,7 +316,7 @@ function FormInner() {
                     {site.activities.map((a) => (
                       <div key={a.key} className="flex flex-col sm:flex-row gap-2 items-start sm:items-center bg-slate-900/60 rounded-xl p-3">
                         <select value={a.activityType} onChange={(e) => updateActivity(activeSite, a.key, { activityType: e.target.value })} className="px-3 py-2 bg-slate-900 border border-white/10 rounded-lg text-white text-sm sm:w-56">
-                          {ACTIVITY_TYPES.map((x) => <option key={x.code} value={x.code}>{L(x)}</option>)}
+                          {masterData.activityTypes.map((x) => <option key={x.code} value={x.code}>{L(x)}</option>)}
                         </select>
                         <input type="text" placeholder={t("form.activityDesc")} value={a.desc} onChange={(e) => updateActivity(activeSite, a.key, { desc: e.target.value })} className="flex-1 px-3 py-2 bg-slate-900 border border-white/10 rounded-lg text-white text-sm w-full" />
                         <button onClick={() => removeActivity(activeSite, a.key)} className="p-2 text-red-400 hover:bg-red-400/20 rounded-lg shrink-0">
@@ -411,7 +403,7 @@ function FormInner() {
                       </Field>
                       <Field label={t("form.propStatus")}>
                         <select value={prop.status} onChange={(e) => setProposals((s) => s.map((x) => (x.key === prop.key ? { ...x, status: e.target.value } : x)))} className={inputCls}>
-                          {PROPOSAL_STATUSES.map((x) => <option key={x.code} value={x.code}>{L(x)}</option>)}
+                          {masterData.proposalStatuses.map((x) => <option key={x.code} value={x.code}>{L(x)}</option>)}
                         </select>
                       </Field>
                       <Field label={t("form.propDeadline")}>
@@ -445,7 +437,7 @@ function FormInner() {
                       </Field>
                       <Field label={t("form.itemType")}>
                         <select value={it.typeCode} onChange={(e) => setReportItems((s) => s.map((x) => (x.key === it.key ? { ...x, typeCode: e.target.value } : x)))} className={inputCls}>
-                          {REPORT_TYPES.map((x) => <option key={x.code} value={x.code}>{L(x)}</option>)}
+                          {masterData.reportTypes.map((x) => <option key={x.code} value={x.code}>{L(x)}</option>)}
                         </select>
                       </Field>
                       <Field label={t("form.statusUpdate")} full>
@@ -465,7 +457,7 @@ function FormInner() {
               <motion.div key="s5" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-6">
                 <h2 className="text-2xl font-bold text-white mb-2">{t("form.step.comms")}</h2>
                 {comms.map((c, i) => {
-                  const meta = COMM_CHANNELS[i];
+                  const meta = masterData.commChannels[i];
                   return (
                     <div key={c.channelCode} className={cardCls}>
                       <h3 className="text-base font-bold text-white mb-4">{L(meta)}</h3>
@@ -506,7 +498,7 @@ function FormInner() {
                       <Field label={t("form.site")}>
                         <select value={x.siteCode} onChange={(e) => setIssues((s) => s.map((y) => (y.key === x.key ? { ...y, siteCode: e.target.value } : y)))} className={inputCls}>
                           <option value="">—</option>
-                          {SITES.map((s) => <option key={s.code} value={s.code}>{L(s)} ({s.code})</option>)}
+                          {masterData.sites.map((s) => <option key={s.code} value={s.code}>{L(s)} ({s.code})</option>)}
                         </select>
                       </Field>
                       <Field label={t("form.issuePic")}>
@@ -542,7 +534,7 @@ function FormInner() {
                       <Field label={t("form.site")}>
                         <select value={x.siteCode} onChange={(e) => setPriorities((s) => s.map((y) => (y.key === x.key ? { ...y, siteCode: e.target.value } : y)))} className={inputCls}>
                           <option value="">—</option>
-                          {SITES.map((s) => <option key={s.code} value={s.code}>{L(s)} ({s.code})</option>)}
+                          {masterData.sites.map((s) => <option key={s.code} value={s.code}>{L(s)} ({s.code})</option>)}
                         </select>
                       </Field>
                       <Field label={t("form.issueDeadline")}>

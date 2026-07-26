@@ -3,7 +3,7 @@ import PDFDocument from "pdfkit";
 import path from "path";
 import { getSession } from "@/lib/auth";
 import { getFullDashboardData, getMonthRawRows, siteName } from "@/lib/reportData";
-import { SITES } from "@/lib/sheets";
+import { getMasterData } from "@/lib/sheets";
 
 export const runtime = "nodejs";
 
@@ -71,6 +71,7 @@ export async function GET(request: Request) {
 
   const data = await getFullDashboardData(month);
   const raw = await getMonthRawRows(data.month);
+  const { sites: SITES } = await getMasterData();
   const bySite = new Map(raw.siteUpdates.map((s) => [s.siteCode, s]));
 
   const fontDir = path.join(process.cwd(), "public", "fonts");
@@ -128,7 +129,7 @@ export async function GET(request: Request) {
   for (let i = 0; i < SITES.length; i++) {
     const s = SITES[i];
     const up = bySite.get(s.code);
-    h2(`1.${i + 1} ${siteName(s.code, "vi")}`);
+    h2(`1.${i + 1} ${siteName(SITES, s.code, "vi")}`);
     label("Số hoạt động");
     bodyText(String(up?.numActs || 0));
     label("Hoạt động và ghi chú trong tháng");

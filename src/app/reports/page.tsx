@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Plus, FileText } from "lucide-react";
+import { Plus, FileText, Trash2 } from "lucide-react";
 import Nav from "@/components/Nav";
 import { useLanguage } from "@/context/LanguageContext";
+import { useSession } from "@/hooks/useSession";
 
 type ReportRow = {
   id: string;
@@ -24,13 +25,43 @@ const STATUS_STYLE: Record<string, string> = {
 
 export default function ReportsList() {
   const { t } = useLanguage();
+  const { user, isAdmin } = useSession();
   const [rows, setRows] = useState<ReportRow[] | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  useEffect(() => {
+  function load() {
     fetch("/api/reports")
       .then((r) => r.json())
       .then((d) => setRows(d.reports || []));
-  }, []);
+  }
+  useEffect(load, []);
+
+  // Edit: the owner can always edit their own report (any status) — editing an
+  // Approved/Submitted report naturally moves it back into the review pipeline once
+  // saved, since the form re-submits with a fresh Draft/Submitted status. Admins can
+  // also fix anyone's report.
+  function canEdit(r: ReportRow): boolean {
+    return r.userId === user?.id || isAdmin;
+  }
+
+  // Delete: the owner may only delete their own Draft (nothing has been submitted for
+  // review yet). Once Submitted/Approved/Returned, only an Admin can remove it, to keep
+  // an audit trail for anything a Manager has already seen.
+  function canDelete(r: ReportRow): boolean {
+    return isAdmin || (r.userId === user?.id && r.status === "Draft");
+  }
+
+  async function deleteReport(id: string) {
+    if (!confirm(t("reports.deleteConfirm"))) return;
+    setDeletingId(id);
+    const res = await fetch(`/api/reports/${id}`, { method: "DELETE" });
+    setDeletingId(null);
+    if (res.ok) load();
+    else {
+      const data = await res.json().catch(() => ({}));
+      alert(data.error === "forbidden" ? t("reports.deleteForbidden") : data.error || "Error");
+    }
+  }
 
   return (
     <div className="min-h-screen bg-slate-900 text-slate-200">
@@ -85,10 +116,20 @@ export default function ReportsList() {
                       <Link href={`/reports/${r.id}`} className="text-xs px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700">
                         {t("reports.view")}
                       </Link>
-                      {(r.status === "Draft" || r.status === "Returned") && (
+                      {canEdit(r) && (
                         <Link href={`/form?id=${r.id}`} className="text-xs px-3 py-1.5 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 text-blue-300">
                           {t("reports.edit")}
                         </Link>
+                      )}
+                      {canDelete(r) && (
+                        <button
+                          onClick={() => deleteReport(r.id)}
+                          disabled={deletingId === r.id}
+                          title={t("reports.delete")}
+                          className="text-xs px-3 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-300 disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-1.5"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
                       )}
                     </div>
                   </td>

@@ -2,7 +2,8 @@
 
 import { useEffect, useState, use as usePromise } from "react";
 import Link from "next/link";
-import { ArrowLeft, MapPin, FileText, AlertTriangle, CheckCircle, Undo2, Megaphone, ListChecks, CalendarClock } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ArrowLeft, MapPin, FileText, AlertTriangle, CheckCircle, Undo2, Megaphone, ListChecks, CalendarClock, Pencil, Trash2 } from "lucide-react";
 import Nav from "@/components/Nav";
 import CommentsThread from "@/components/CommentsThread";
 import { useLanguage } from "@/context/LanguageContext";
@@ -25,15 +26,7 @@ type ReportDetail = {
   deadlines: { date: string; event: string; siteDonor: string; pic: string }[];
 };
 
-const ACTIVITY_LABELS: Record<string, string> = {
-  SMART_TRAINING: "Tập huấn SMART",
-  SMART_REPORTING: "Báo cáo/phân tích SMART",
-  AWARENESS: "Nâng cao nhận thức",
-  MEETING: "Họp",
-  FIELD_SURVEY: "Khảo sát thực địa",
-  INTERVIEW: "Phỏng vấn",
-  OTHER: "Khác",
-};
+
 
 function Section({ icon, title, children }: { icon: React.ReactNode; title: string; children: React.ReactNode }) {
   return (
@@ -47,9 +40,12 @@ function Section({ icon, title, children }: { icon: React.ReactNode; title: stri
 export default function ReportView({ params }: { params: Promise<{ id: string }> }) {
   const { id } = usePromise(params);
   const { t } = useLanguage();
-  const { user, isManager } = useSession();
+  const router = useRouter();
+  const { user, isManager, isAdmin } = useSession();
   const [report, setReport] = useState<ReportDetail | null>(null);
   const [busy, setBusy] = useState(false);
+  // Sheet-driven activity-type labels (see /api/master-data) — code -> display name.
+  const [activityLabels, setActivityLabels] = useState<Record<string, string>>({});
 
   function load() {
     fetch(`/api/reports/${id}`)
@@ -57,6 +53,16 @@ export default function ReportView({ params }: { params: Promise<{ id: string }>
       .then((d) => setReport(d.report || null));
   }
   useEffect(load, [id]);
+
+  useEffect(() => {
+    fetch("/api/master-data")
+      .then((r) => r.json())
+      .then((d: { activityTypes: { code: string; vi: string; en: string }[] }) => {
+        const map: Record<string, string> = {};
+        (d.activityTypes || []).forEach((x) => (map[x.code] = x.vi));
+        setActivityLabels(map);
+      });
+  }, []);
 
   async function setStatus(status: "Approved" | "Returned") {
     if (status === "Returned" && !confirm(t("approve.confirmReturn"))) return;
@@ -68,6 +74,25 @@ export default function ReportView({ params }: { params: Promise<{ id: string }>
     });
     setBusy(false);
     load();
+  }
+
+  // Same rules as the reports list: owner can always edit their own report (an edit
+  // naturally moves an Approved/Submitted report back into the review pipeline once
+  // saved); owner can only delete while still a Draft; Admin can do either, anytime.
+  const canEdit = !!report && (report.userId === user?.id || isAdmin);
+  const canDelete = !!report && (isAdmin || (report.userId === user?.id && report.status === "Draft"));
+
+  async function deleteReport() {
+    if (!report) return;
+    if (!confirm(t("reports.deleteConfirm"))) return;
+    setBusy(true);
+    const res = await fetch(`/api/reports/${report.id}`, { method: "DELETE" });
+    setBusy(false);
+    if (res.ok) router.push("/reports");
+    else {
+      const data = await res.json().catch(() => ({}));
+      alert(data.error === "forbidden" ? t("reports.deleteForbidden") : data.error || "Error");
+    }
   }
 
   return (
@@ -89,16 +114,28 @@ export default function ReportView({ params }: { params: Promise<{ id: string }>
                   {report.member} · {report.month} · <span className="text-slate-300">{t("status." + report.status.toLowerCase())}</span>
                 </p>
               </div>
-              {isManager && report.status === "Submitted" && (
-                <div className="flex gap-2">
-                  <button disabled={busy} onClick={() => setStatus("Returned")} className="flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-300 text-sm font-medium disabled:opacity-50">
-                    <Undo2 className="w-4 h-4" /> {t("approve.return")}
+              <div className="flex gap-2 flex-wrap">
+                {isManager && report.status === "Submitted" && (
+                  <>
+                    <button disabled={busy} onClick={() => setStatus("Returned")} className="flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-300 text-sm font-medium disabled:opacity-50">
+                      <Undo2 className="w-4 h-4" /> {t("approve.return")}
+                    </button>
+                    <button disabled={busy} onClick={() => setStatus("Approved")} className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-900 text-sm font-bold disabled:opacity-50">
+                      <CheckCircle className="w-4 h-4" /> {t("approve.approve")}
+                    </button>
+                  </>
+                )}
+                {canEdit && (
+                  <Link href={`/form?id=${report.id}`} className="flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 text-blue-300 text-sm font-medium">
+                    <Pencil className="w-4 h-4" /> {t("reports.edit")}
+                  </Link>
+                )}
+                {canDelete && (
+                  <button disabled={busy} onClick={deleteReport} className="flex items-center gap-2 px-4 py-2 rounded-xl bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-300 text-sm font-medium disabled:opacity-50">
+                    <Trash2 className="w-4 h-4" /> {t("reports.delete")}
                   </button>
-                  <button disabled={busy} onClick={() => setStatus("Approved")} className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-900 text-sm font-bold disabled:opacity-50">
-                    <CheckCircle className="w-4 h-4" /> {t("approve.approve")}
-                  </button>
-                </div>
-              )}
+                )}
+              </div>
             </div>
 
             <Section icon={<MapPin className="w-5 h-5 text-emerald-400" />} title={t("form.step.sites")}>
@@ -113,7 +150,7 @@ export default function ReportView({ params }: { params: Promise<{ id: string }>
                       <ul className="text-sm text-slate-300 list-disc list-inside space-y-0.5 mb-2">
                         {s.activities.map((a, ai) => (
                           <li key={ai}>
-                            <span className="text-emerald-300">{ACTIVITY_LABELS[a.activityType] || a.activityType}</span>
+                            <span className="text-emerald-300">{activityLabels[a.activityType] || a.activityType}</span>
                             {a.desc && ` — ${a.desc}`}
                           </li>
                         ))}
