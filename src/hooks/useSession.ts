@@ -1,16 +1,17 @@
 "use client";
 import { useEffect, useState } from "react";
 
-export type SessionUser = { id: string; name: string; role: string; email: string };
+export type SessionUser = { id: string; name: string; role: string; email: string; avatarUrl?: string };
 
 export function useSession() {
-  const [user, setUser] = useState<SessionUser | null | undefined>(undefined); // undefined = loading
+    const [user, setUser] = useState<SessionUser | null | undefined>(undefined); // undefined = loading
   useEffect(() => {
-    fetch("/api/auth/me")
-      .then((r) => (r.ok ? r.json() : { user: null }))
-      .then((d) => setUser(d.user))
-      .catch(() => setUser(null));
+        fetch("/api/auth/me")
+          .then((r) => (r.ok ? r.json() : { user: null }))
+          .then((d) => setUser(d.user))
+          .catch(() => setUser(null));
   }, []);
-  const isManager = user ? user.role === "admin" || user.role === "manager" : false;
-  return { user, loading: user === undefined, isManager };
+    const isManager = user ? user.role === "admin" || user.role === "manager" : false;
+    const isAdmin = user ? user.role === "admin" : false;
+    return { user, loading: user === undefined, isManager, isAdmin };
 }
