@@ -10,7 +10,17 @@ import { useLanguage } from "@/context/LanguageContext";
 import { useSession } from "@/hooks/useSession";
 
 type Activity = { activityType: string; desc: string };
-type SiteEntry = { siteCode: string; activities: Activity[]; notes: string; results: string; plan: string; photos: { url: string; caption: string }[] };
+type SiteEntry = {
+  siteCode: string;
+  activities: Activity[];
+  keyActivities: string;
+  keyResults: string;
+  difficulties: string;
+  followUp: string;
+  plan: string;
+  photos: { url: string; caption: string }[];
+  relatedDocs: { url: string; label: string }[];
+};
 type ReportDetail = {
   id: string;
   userId: string;
@@ -18,7 +28,7 @@ type ReportDetail = {
   month: string;
   status: string;
   sites: SiteEntry[];
-  proposals: { name: string; status: string; deadline: string; note: string }[];
+  proposals: { name: string; writer: string; writerName: string; donor: string; status: string; deadline: string; note: string }[];
   reportItems: { itemName: string; typeCode: string; statusUpdate: string; deadlineAction: string }[];
   comms: { channelCode: string; count: string; thisMonth: string; nextMonth: string }[];
   issues: { siteCode: string; description: string; actionNeeded: string; pic: string }[];
@@ -156,8 +166,10 @@ export default function ReportView({ params }: { params: Promise<{ id: string }>
                         ))}
                       </ul>
                     )}
-                    {s.notes && <p className="text-xs text-slate-500 mt-1">{t("form.activityNotes")}: {s.notes}</p>}
-                    {s.results && <p className="text-xs text-slate-500 mt-1">{t("form.results")}: {s.results}</p>}
+                    {s.keyActivities && <p className="text-xs text-slate-500 mt-1">{t("form.keyActivities")}: {s.keyActivities}</p>}
+                    {s.keyResults && <p className="text-xs text-slate-500 mt-1">{t("form.keyResults")}: {s.keyResults}</p>}
+                    {s.difficulties && <p className="text-xs text-slate-500 mt-1">{t("form.difficulties")}: {s.difficulties}</p>}
+                    {s.followUp && <p className="text-xs text-slate-500 mt-1">{t("form.followUp")}: {s.followUp}</p>}
                     {s.plan && <p className="text-xs text-slate-500">{t("form.plan")}: {s.plan}</p>}
                     {s.photos.length > 0 && (
                       <div className="flex flex-wrap gap-2 mt-2">
@@ -166,6 +178,17 @@ export default function ReportView({ params }: { params: Promise<{ id: string }>
                           <img key={pi} src={p.url} alt={p.caption || "photo"} title={p.caption} className="w-16 h-16 object-cover rounded-lg border border-white/10" />
                         ))}
                       </div>
+                    )}
+                    {s.relatedDocs.length > 0 && (
+                      <ul className="text-xs text-emerald-300 space-y-0.5 mt-2">
+                        {s.relatedDocs.map((d, di) => (
+                          <li key={di}>
+                            <a href={d.url} target="_blank" rel="noopener noreferrer" className="underline hover:text-emerald-200">
+                              {d.label || d.url}
+                            </a>
+                          </li>
+                        ))}
+                      </ul>
                     )}
                   </div>
                 ))}
@@ -181,6 +204,13 @@ export default function ReportView({ params }: { params: Promise<{ id: string }>
                       <b className="text-white">{p.name}</b>
                       <span className="text-xs px-2 py-0.5 rounded bg-slate-700 text-slate-300">{p.status}</span>
                     </div>
+                    {(p.writerName || p.donor) && (
+                      <p className="text-xs text-slate-500 mt-1">
+                        {p.writerName && <>{t("form.propWriter")}: {p.writerName}</>}
+                        {p.writerName && p.donor && " · "}
+                        {p.donor && <>{t("form.propDonor")}: {p.donor}</>}
+                      </p>
+                    )}
                     {p.note && <p className="text-sm text-slate-400 mt-1">{p.note}</p>}
                   </div>
                 ))}

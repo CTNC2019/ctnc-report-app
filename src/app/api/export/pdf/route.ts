@@ -125,23 +125,30 @@ export async function GET(request: Request) {
     doc.font("Regular").fontSize(9).fillColor(MUTED).text(text, left, doc.y + 2, { width: usableWidth });
   }
 
-  h1("1. Tổng quan hoạt động theo khu vực / Monthly overview by site");
+  h1("I. Tổng quan hoạt động theo khu vực / Monthly overview by site");
   for (let i = 0; i < SITES.length; i++) {
     const s = SITES[i];
     const up = bySite.get(s.code);
-    h2(`1.${i + 1} ${siteName(SITES, s.code, "vi")}`);
-    label("Số hoạt động");
-    bodyText(String(up?.numActs || 0));
-    label("Hoạt động và ghi chú trong tháng");
-    if (up?.notes) bodyText(up.notes);
+    h2(`${i + 1}. ${siteName(SITES, s.code, "vi")} (${up?.numActs || 0} hoạt động / activities)`);
+
+    label(`${i + 1}.1. Hoạt động chính / Key activities`);
+    if (up?.keyActivities) bodyText(up.keyActivities);
     if (up?.activitiesList.length) {
       up.activitiesList.forEach((a) => bodyText(`• ${a.typeLabel}${a.desc ? " — " + a.desc : ""}`));
-    } else if (!up?.notes) {
+    } else if (!up?.keyActivities) {
       bodyText(up?.desc || "—");
     }
-    label("Kết quả, thách thức, việc cần theo dõi");
-    bodyText(up?.results || "—");
-    label("Ảnh và tài liệu minh họa");
+
+    label(`${i + 1}.2. Kết quả / Key results`);
+    bodyText(up?.keyResults || "—");
+
+    label(`${i + 1}.3. Khó khăn, thách thức / Difficulties, challenges`);
+    bodyText(up?.difficulties || "—");
+
+    label(`${i + 1}.4. Việc cần theo dõi / Follow-up`);
+    bodyText(up?.followUp || "—");
+
+    label(`${i + 1}.5. Hình ảnh hoạt động / Activity images`);
     if (up?.photos.length) {
       for (const p of up.photos) {
         const buf = await fetchImageBuffer(p.url);
@@ -160,21 +167,31 @@ export async function GET(request: Request) {
     } else {
       italicText("Không có ảnh đính kèm.");
     }
-    label("Kế hoạch tháng tới");
+
+    label(`${i + 1}.6. Tài liệu liên quan / Related documents`);
+    if (up?.relatedDocs.length) {
+      up.relatedDocs.forEach((d) => bodyText(`• ${d.label || d.url}${d.label ? " — " + d.url : ""}`));
+    } else {
+      italicText("Không có tài liệu liên quan.");
+    }
+
+    label(`${i + 1}.7. Kế hoạch tháng tới / Plan for next month`);
     bodyText(up?.plan || "—");
     doc.moveDown(0.6);
   }
 
-  h1("2. Đề xuất / Proposals");
+  h1("II. Đề xuất dự án / Project Proposal");
   doc.y = drawTable(
     doc, left, doc.y,
-    [usableWidth * 0.3, usableWidth * 0.2, usableWidth * 0.15, usableWidth * 0.35],
-    ["Đề xuất / Donor", "Trạng thái", "Hạn chót", "Ghi chú"],
-    raw.proposals.length ? raw.proposals.map((p) => [p.name, p.statusLabel, p.deadline, p.note]) : [["Không có đề xuất trong tháng", "-", "-", "-"]],
+    [usableWidth * 0.24, usableWidth * 0.16, usableWidth * 0.16, usableWidth * 0.14, usableWidth * 0.1, usableWidth * 0.2],
+    ["Tên đề xuất", "Người viết", "Nhà tài trợ", "Trạng thái", "Hạn chót", "Ghi chú"],
+    raw.proposals.length
+      ? raw.proposals.map((p) => [p.name, p.writer, p.donor, p.statusLabel, p.deadline, p.note])
+      : [["Không có đề xuất trong tháng", "-", "-", "-", "-", "-"]],
     bottomMargin
   );
 
-  h1("3. Báo cáo & cập nhật dữ liệu / Reports and data updates");
+  h1("III. Báo cáo & cập nhật dữ liệu / Reports and data updates");
   doc.y = drawTable(
     doc, left, doc.y,
     [usableWidth * 0.3, usableWidth * 0.15, usableWidth * 0.3, usableWidth * 0.25],
@@ -183,7 +200,7 @@ export async function GET(request: Request) {
     bottomMargin
   );
 
-  h1("4. Truyền thông với donor & công chúng");
+  h1("IV. Truyền thông / Communications");
   doc.y = drawTable(
     doc, left, doc.y,
     [usableWidth * 0.25, usableWidth * 0.15, usableWidth * 0.3, usableWidth * 0.3],
@@ -192,7 +209,7 @@ export async function GET(request: Request) {
     bottomMargin
   );
 
-  h1("5. Vấn đề cần hỗ trợ");
+  h1("V. Vấn đề cần hỗ trợ / Key challenges or support needed");
   doc.y = drawTable(
     doc, left, doc.y,
     [usableWidth * 0.3, usableWidth * 0.15, usableWidth * 0.35, usableWidth * 0.2],
@@ -201,7 +218,7 @@ export async function GET(request: Request) {
     bottomMargin
   );
 
-  h1("6. Ưu tiên chính tháng tới");
+  h1("VI. Ưu tiên chính tháng tới / Main priorities for next month");
   doc.y = drawTable(
     doc, left, doc.y,
     [usableWidth * 0.1, usableWidth * 0.2, usableWidth * 0.35, usableWidth * 0.2, usableWidth * 0.15],
@@ -210,7 +227,7 @@ export async function GET(request: Request) {
     bottomMargin
   );
 
-  h1("7. Deadline quan trọng tháng tới");
+  h1("VII. Deadline quan trọng tháng tới / Important deadlines next month");
   doc.y = drawTable(
     doc, left, doc.y,
     [usableWidth * 0.15, usableWidth * 0.4, usableWidth * 0.25, usableWidth * 0.2],

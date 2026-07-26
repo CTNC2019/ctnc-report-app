@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSession, isManager } from "@/lib/auth";
 import { appendObjects, deleteRowsByKey, readObjects, updateObjectByKey } from "@/lib/sheets";
-import { stringifyPhotos, type PhotoItem } from "@/lib/reportData";
+import { stringifyPhotos, stringifyDocs, type PhotoItem, type DocLink } from "@/lib/reportData";
 
 export const runtime = "nodejs";
 
@@ -36,8 +36,18 @@ export async function GET() {
 }
 
 type ActivityIn = { activityType: string; desc?: string };
-type SiteIn = { siteCode: string; activities?: ActivityIn[]; notes?: string; results?: string; plan?: string; photos?: PhotoItem[] };
-type ProposalIn = { name: string; status?: string; deadline?: string; note?: string };
+type SiteIn = {
+  siteCode: string;
+  activities?: ActivityIn[];
+  keyActivities?: string;
+  keyResults?: string;
+  difficulties?: string;
+  followUp?: string;
+  plan?: string;
+  photos?: PhotoItem[];
+  relatedDocs?: DocLink[];
+};
+type ProposalIn = { name: string; writer?: string; donor?: string; status?: string; deadline?: string; note?: string };
 type ReportItemIn = { itemName: string; typeCode?: string; statusUpdate?: string; deadlineAction?: string };
 type CommIn = { channelCode: string; count?: number | string; thisMonth?: string; nextMonth?: string };
 type IssueIn = { siteCode?: string; description: string; actionNeeded?: string; pic?: string };
@@ -92,17 +102,30 @@ export async function POST(request: Request) {
 
   const sites: SiteIn[] = body.sites || [];
   const siteUpdateRows = sites
-    .filter((s) => (s.activities && s.activities.length) || s.notes || s.results || s.plan || (s.photos && s.photos.length))
+    .filter(
+      (s) =>
+        (s.activities && s.activities.length) ||
+        s.keyActivities ||
+        s.keyResults ||
+        s.difficulties ||
+        s.followUp ||
+        s.plan ||
+        (s.photos && s.photos.length) ||
+        (s.relatedDocs && s.relatedDocs.length)
+    )
     .map((s) => ({
       Update_ID: `${reportId}-${s.siteCode}`,
       Report_ID: reportId,
       Site_Code: s.siteCode,
       Num_Acts: String((s.activities || []).length),
       Activities_Notes: (s.activities || []).map((a) => a.desc).filter(Boolean).join("; "),
-      Notes_This_Month: s.notes || "",
-      Results_Challenges: s.results || "",
+      Key_Activities: s.keyActivities || "",
+      Key_Results: s.keyResults || "",
+      Difficulties_Challenges: s.difficulties || "",
+      Follow_Up: s.followUp || "",
       Next_Month_Plan: s.plan || "",
       Photos_JSON: stringifyPhotos(s.photos || []),
+      Related_Docs_JSON: stringifyDocs(s.relatedDocs || []),
     }));
   if (siteUpdateRows.length) await appendObjects("Data_Site_Updates", siteUpdateRows);
 
@@ -125,6 +148,8 @@ export async function POST(request: Request) {
         Prop_ID: `P${reportId}-${i}`,
         Report_ID: reportId,
         Proposal_Name: p.name || "",
+        Writer_UserID: p.writer || "",
+        Donor: p.donor || "",
         Status_Code: p.status || "Writing",
         Deadline: p.deadline || "",
         Short_Note: p.note || "",

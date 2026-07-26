@@ -22,9 +22,20 @@ type MasterData = {
 };
 
 type Photo = { url: string; caption: string };
+type DocLink = { url: string; label: string };
 type Activity = { key: number; activityType: string; desc: string };
-type SiteEntry = { siteCode: string; activities: Activity[]; notes: string; results: string; plan: string; photos: Photo[] };
-type Proposal = { key: number; name: string; status: string; deadline: string; note: string };
+type SiteEntry = {
+  siteCode: string;
+  activities: Activity[];
+  keyActivities: string;
+  keyResults: string;
+  difficulties: string;
+  followUp: string;
+  plan: string;
+  photos: Photo[];
+  relatedDocs: DocLink[];
+};
+type Proposal = { key: number; name: string; writer: string; donor: string; status: string; deadline: string; note: string };
 type ReportDataItem = { key: number; itemName: string; typeCode: string; statusUpdate: string; deadlineAction: string };
 type CommEntry = { channelCode: string; count: string; thisMonth: string; nextMonth: string };
 type IssueItem = { key: number; siteCode: string; description: string; actionNeeded: string; pic: string };
@@ -40,7 +51,17 @@ function nowMonth() {
 }
 
 function emptySites(sites: MasterItem[]): SiteEntry[] {
-  return sites.map((s) => ({ siteCode: s.code, activities: [], notes: "", results: "", plan: "", photos: [] }));
+  return sites.map((s) => ({
+    siteCode: s.code,
+    activities: [],
+    keyActivities: "",
+    keyResults: "",
+    difficulties: "",
+    followUp: "",
+    plan: "",
+    photos: [],
+    relatedDocs: [],
+  }));
 }
 function emptyComms(channels: MasterItem[]): CommEntry[] {
   return channels.map((c) => ({ channelCode: c.code, count: "", thisMonth: "", nextMonth: "" }));
@@ -62,6 +83,7 @@ function FormInner() {
   const [done, setDone] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [masterData, setMasterData] = useState<MasterData | null>(null);
+  const [members, setMembers] = useState<{ id: string; name: string }[]>([]);
   const [month, setMonth] = useState(nowMonth());
   const [activeSite, setActiveSite] = useState(0);
 
@@ -92,6 +114,15 @@ function FormInner() {
       });
   }, [editId]);
 
+  // Real member list (Dim_Users), used for the Proposal "Writer" dropdown per the
+  // revised report template — separate from the sheet-driven label taxonomy above.
+  useEffect(() => {
+    fetch("/api/members")
+      .then((r) => r.json())
+      .then((d: { members: { id: string; name: string }[] }) => setMembers(d.members || []))
+      .catch(() => {});
+  }, []);
+
   // Edit an existing report: wait for master data too, so unfilled sites/channels are
   // still seeded correctly alongside whatever the report already has saved.
   useEffect(() => {
@@ -108,7 +139,17 @@ function FormInner() {
               const found = rep.sites.find((x: SiteEntry) => x.siteCode === s.code);
               return found
                 ? { ...found, activities: (found.activities || []).map((a: Activity) => ({ ...a, key: nextKey() })) }
-                : { siteCode: s.code, activities: [], notes: "", results: "", plan: "", photos: [] };
+                : {
+                    siteCode: s.code,
+                    activities: [],
+                    keyActivities: "",
+                    keyResults: "",
+                    difficulties: "",
+                    followUp: "",
+                    plan: "",
+                    photos: [],
+                    relatedDocs: [],
+                  };
             })
           );
         } else {
@@ -174,7 +215,13 @@ function FormInner() {
   const setCaption = (idx: number, url: string, caption: string) =>
     updateSite(idx, { photos: sites[idx].photos.map((p) => (p.url === url ? { ...p, caption } : p)) });
 
-  const addProposal = () => setProposals((s) => [...s, { key: nextKey(), name: "", status: "Writing", deadline: "", note: "" }]);
+  // --- Related documents (1.6) — list of pasted URLs with an optional short label ---
+  const addDoc = (idx: number) => updateSite(idx, { relatedDocs: [...sites[idx].relatedDocs, { url: "", label: "" }] });
+  const removeDoc = (idx: number, i: number) => updateSite(idx, { relatedDocs: sites[idx].relatedDocs.filter((_, j) => j !== i) });
+  const updateDoc = (idx: number, i: number, patch: Partial<DocLink>) =>
+    updateSite(idx, { relatedDocs: sites[idx].relatedDocs.map((d, j) => (j === i ? { ...d, ...patch } : d)) });
+
+  const addProposal = () => setProposals((s) => [...s, { key: nextKey(), name: "", writer: user?.id || "", donor: "", status: "Writing", deadline: "", note: "" }]);
   const removeProposal = (key: number) => setProposals((s) => s.filter((x) => x.key !== key));
 
   const addReportItem = () => setReportItems((s) => [...s, { key: nextKey(), itemName: "", typeCode: "Annual", statusUpdate: "", deadlineAction: "" }]);
@@ -202,12 +249,15 @@ function FormInner() {
           sites: sites.map((s) => ({
             siteCode: s.siteCode,
             activities: s.activities.map(({ activityType, desc }) => ({ activityType, desc })),
-            notes: s.notes,
-            results: s.results,
+            keyActivities: s.keyActivities,
+            keyResults: s.keyResults,
+            difficulties: s.difficulties,
+            followUp: s.followUp,
             plan: s.plan,
             photos: s.photos,
+            relatedDocs: s.relatedDocs,
           })),
-          proposals: proposals.map(({ name, status, deadline, note }) => ({ name, status, deadline, note })),
+          proposals: proposals.map(({ name, writer, donor, status, deadline, note }) => ({ name, writer, donor, status, deadline, note })),
           reportItems: reportItems.map(({ itemName, typeCode, statusUpdate, deadlineAction }) => ({ itemName, typeCode, statusUpdate, deadlineAction })),
           comms: comms.map(({ channelCode, count, thisMonth, nextMonth }) => ({ channelCode, count, thisMonth, nextMonth })),
           issues: issues.map(({ siteCode, description, actionNeeded, pic }) => ({ siteCode, description, actionNeeded, pic })),
@@ -329,20 +379,24 @@ function FormInner() {
 
                   <div className="grid grid-cols-1 gap-4 mb-4">
                     <div>
-                      <label className={labelCls}>{t("form.activityNotes")}</label>
-                      <textarea rows={2} value={site.notes} onChange={(e) => updateSite(activeSite, { notes: e.target.value })} className={inputCls + " resize-none"} />
+                      <label className={labelCls}>{t("form.keyActivities")}</label>
+                      <textarea rows={2} value={site.keyActivities} onChange={(e) => updateSite(activeSite, { keyActivities: e.target.value })} className={inputCls + " resize-none"} />
                     </div>
                     <div>
-                      <label className={labelCls}>{t("form.results")}</label>
-                      <textarea rows={2} value={site.results} onChange={(e) => updateSite(activeSite, { results: e.target.value })} className={inputCls + " resize-none"} />
+                      <label className={labelCls}>{t("form.keyResults")}</label>
+                      <textarea rows={2} value={site.keyResults} onChange={(e) => updateSite(activeSite, { keyResults: e.target.value })} className={inputCls + " resize-none"} />
                     </div>
                     <div>
-                      <label className={labelCls}>{t("form.plan")}</label>
-                      <textarea rows={2} value={site.plan} onChange={(e) => updateSite(activeSite, { plan: e.target.value })} className={inputCls + " resize-none"} />
+                      <label className={labelCls}>{t("form.difficulties")}</label>
+                      <textarea rows={2} value={site.difficulties} onChange={(e) => updateSite(activeSite, { difficulties: e.target.value })} className={inputCls + " resize-none"} />
+                    </div>
+                    <div>
+                      <label className={labelCls}>{t("form.followUp")}</label>
+                      <textarea rows={2} value={site.followUp} onChange={(e) => updateSite(activeSite, { followUp: e.target.value })} className={inputCls + " resize-none"} />
                     </div>
                   </div>
 
-                  <div>
+                  <div className="mb-4">
                     <div className="flex items-center justify-between mb-2">
                       <label className={labelCls + " mb-0"}>{t("form.photos")}</label>
                       <button
@@ -385,6 +439,44 @@ function FormInner() {
                       ))}
                     </div>
                   </div>
+
+                  <div className="mb-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <label className={labelCls + " mb-0"}>{t("form.relatedDocs")}</label>
+                      <button onClick={() => addDoc(activeSite)} className="flex items-center gap-1.5 bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded-lg text-xs text-white">
+                        <Plus className="w-3.5 h-3.5" /> {t("form.addDoc")}
+                      </button>
+                    </div>
+                    {site.relatedDocs.length === 0 && <p className="text-sm text-slate-500">{t("form.noItems")}</p>}
+                    <div className="space-y-2">
+                      {site.relatedDocs.map((d, i) => (
+                        <div key={i} className="flex flex-col sm:flex-row gap-2 items-start sm:items-center bg-slate-900/60 rounded-xl p-3">
+                          <input
+                            type="text"
+                            placeholder="https://..."
+                            value={d.url}
+                            onChange={(e) => updateDoc(activeSite, i, { url: e.target.value })}
+                            className="flex-1 px-3 py-2 bg-slate-900 border border-white/10 rounded-lg text-white text-sm w-full"
+                          />
+                          <input
+                            type="text"
+                            placeholder={t("form.docLabel")}
+                            value={d.label}
+                            onChange={(e) => updateDoc(activeSite, i, { label: e.target.value })}
+                            className="px-3 py-2 bg-slate-900 border border-white/10 rounded-lg text-white text-sm sm:w-56"
+                          />
+                          <button onClick={() => removeDoc(activeSite, i)} className="p-2 text-red-400 hover:bg-red-400/20 rounded-lg shrink-0">
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className={labelCls}>{t("form.plan")}</label>
+                    <textarea rows={2} value={site.plan} onChange={(e) => updateSite(activeSite, { plan: e.target.value })} className={inputCls + " resize-none"} />
+                  </div>
                 </div>
               </motion.div>
             )}
@@ -405,6 +497,15 @@ function FormInner() {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <Field label={t("form.propName")}>
                         <input type="text" value={prop.name} onChange={(e) => setProposals((s) => s.map((x) => (x.key === prop.key ? { ...x, name: e.target.value } : x)))} className={inputCls} />
+                      </Field>
+                      <Field label={t("form.propWriter")}>
+                        <select value={prop.writer} onChange={(e) => setProposals((s) => s.map((x) => (x.key === prop.key ? { ...x, writer: e.target.value } : x)))} className={inputCls}>
+                          <option value="">—</option>
+                          {members.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+                        </select>
+                      </Field>
+                      <Field label={t("form.propDonor")}>
+                        <input type="text" value={prop.donor} onChange={(e) => setProposals((s) => s.map((x) => (x.key === prop.key ? { ...x, donor: e.target.value } : x)))} className={inputCls} />
                       </Field>
                       <Field label={t("form.propStatus")}>
                         <select value={prop.status} onChange={(e) => setProposals((s) => s.map((x) => (x.key === prop.key ? { ...x, status: e.target.value } : x)))} className={inputCls}>

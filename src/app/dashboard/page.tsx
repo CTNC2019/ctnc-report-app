@@ -64,6 +64,7 @@ type DashboardData = {
   typeStats: { code: string; label: string; count: number }[];
   trend: { month: string; reportsSubmitted: number; totalActivities: number }[];
   proposals: { status: string; label: string; count: number }[];
+  proposalsByDonor: { donor: string; count: number }[];
   commsChannels: { code: string; label: string; count: number }[];
   commsTrend: { month: string; channels: Record<string, number> }[];
   issues: { reportId: string; member: string; siteCode: string; description: string; actionNeeded: string; pic: string }[];
@@ -270,6 +271,27 @@ export default function Dashboard() {
                       ))}
                     </BarChart>
                   </ResponsiveContainer>
+                </div>
+
+                <div className="bg-white rounded-xl p-6 shadow-sm lg:col-span-2">
+                  <h2 className="text-sm font-bold text-slate-800 mb-4 pb-2 border-b-2" style={{ borderColor: "#E8F5E9" }}>
+                    <ClipboardList className="w-4 h-4 inline mr-1.5" style={{ color: GREEN }} />{t("dash.chartDonorTitle")}
+                  </h2>
+                  {data.proposalsByDonor.length ? (
+                    <ResponsiveContainer width="100%" height={Math.max(140, data.proposalsByDonor.length * 40)}>
+                      <BarChart data={data.proposalsByDonor} layout="vertical" margin={{ left: 10 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" horizontal={false} />
+                        <XAxis type="number" stroke="#64748b" fontSize={11} allowDecimals={false} />
+                        <YAxis type="category" dataKey="donor" stroke="#64748b" fontSize={11} width={140} />
+                        <Tooltip contentStyle={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: 10, fontSize: 12 }} />
+                        <Bar dataKey="count" radius={[0, 6, 6, 0]}>
+                          {data.proposalsByDonor.map((_, i) => <Cell key={i} fill={GREENS[i % GREENS.length]} />)}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <p className="text-center text-xs text-slate-400 py-8">{t("dash.noData")}</p>
+                  )}
                 </div>
               </div>
 

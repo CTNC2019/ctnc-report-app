@@ -23,6 +23,23 @@ export function stringifyPhotos(photos: PhotoItem[]): string {
   return JSON.stringify((photos || []).filter((p) => p && p.url));
 }
 
+export type DocLink = { url: string; label: string };
+
+export function parseDocs(json: string | undefined): DocLink[] {
+  if (!json) return [];
+  try {
+    const arr = JSON.parse(json);
+    if (Array.isArray(arr)) return arr.filter((d) => d && d.url);
+  } catch {
+    // ignore malformed JSON, treat as no documents
+  }
+  return [];
+}
+
+export function stringifyDocs(docs: DocLink[]): string {
+  return JSON.stringify((docs || []).filter((d) => d && d.url));
+}
+
 export type MemberStatus = {
   userId: string;
   name: string;
@@ -38,6 +55,7 @@ export type SiteStat = { code: string; name: string; totalActs: number };
 export type TypeStat = { code: string; label: string; count: number };
 export type TrendPoint = { month: string; reportsSubmitted: number; totalActivities: number };
 export type ProposalStat = { status: string; label: string; count: number };
+export type DonorStat = { donor: string; count: number };
 export type CommChannelStat = { code: string; label: string; count: number };
 export type CommTrendPoint = { month: string; channels: Record<string, number> };
 
@@ -99,6 +117,7 @@ export type DashboardData = {
   typeStats: TypeStat[];
   trend: TrendPoint[];
   proposals: ProposalStat[];
+  proposalsByDonor: DonorStat[];
   commsChannels: CommChannelStat[];
   commsTrend: CommTrendPoint[];
   issues: IssueItem[];
@@ -239,6 +258,16 @@ export async function getFullDashboardData(month?: string): Promise<DashboardDat
   }));
   const activeProposals = (propCounts.get("Writing") || 0) + (propCounts.get("Needs review") || 0);
 
+  const donorMap = new Map<string, number>();
+  propsThisMonth.forEach((p) => {
+    const donor = (p.Donor || "").trim();
+    if (!donor) return;
+    donorMap.set(donor, (donorMap.get(donor) || 0) + 1);
+  });
+  const proposalsByDonor: DonorStat[] = Array.from(donorMap.entries())
+    .map(([donor, count]) => ({ donor, count }))
+    .sort((a, b) => b.count - a.count);
+
   // --- Comms this month + 6-month trend ---
   const commsThisMonth = commsRaw.filter((c) => reportIdsThisMonth.has(c.Report_ID));
   const commsOutputs = commsThisMonth.reduce((sum, c) => sum + (parseInt(c.Num_Completed, 10) || 0), 0);
@@ -257,8 +286,11 @@ export async function getFullDashboardData(month?: string): Promise<DashboardDat
     return { month: m, channels };
   });
 
-  // --- Issues (Data_Challenges) ---
-  const issues: IssueItem[] = challengesRaw
+  // --- Issues: merges 2 sources per the revised template —
+  // (a) cross-project "Key challenges or support needed" (Data_Challenges, section V), and
+  // (b) per-site "Difficulties, challenges" (1.3) entered under each site in the monthly form,
+  //     with that site's "Follow-up" (1.4) carried along as the action-needed note.
+  const projectIssues: IssueItem[] = challengesRaw
     .filter((i) => reportIdsThisMonth.has(i.Report_ID))
     .map((i) => {
       const rep = monthReports.find((r) => r.Report_ID === i.Report_ID);
@@ -271,6 +303,20 @@ export async function getFullDashboardData(month?: string): Promise<DashboardDat
         pic: i.Responsible,
       };
     });
+  const siteIssues: IssueItem[] = siteUpdates
+    .filter((s) => reportIdsThisMonth.has(s.Report_ID) && (s.Difficulties_Challenges || "").trim())
+    .map((s) => {
+      const rep = monthReports.find((r) => r.Report_ID === s.Report_ID);
+      return {
+        reportId: s.Report_ID,
+        member: rep ? nameOf(rep.User_ID) : "",
+        siteCode: s.Site_Code,
+        description: s.Difficulties_Challenges,
+        actionNeeded: s.Follow_Up || "",
+        pic: "",
+      };
+    });
+  const issues: IssueItem[] = [...projectIssues, ...siteIssues];
   const issuesNeedingSupport = issues.length;
 
   // --- Priorities (Data_Priorities) ---
@@ -348,6 +394,7 @@ export async function getFullDashboardData(month?: string): Promise<DashboardDat
     typeStats,
     trend,
     proposals: proposalStats,
+    proposalsByDonor,
     commsChannels,
     commsTrend,
     issues,
@@ -368,12 +415,15 @@ export type RawSiteUpdate = {
   numActs: number;
   activitiesList: RawActivity[];
   desc: string;
-  notes: string;
-  results: string;
+  keyActivities: string;
+  keyResults: string;
+  difficulties: string;
+  followUp: string;
   plan: string;
   photos: PhotoItem[];
+  relatedDocs: DocLink[];
 };
-export type RawProposal = { reportId: string; member: string; name: string; statusLabel: string; deadline: string; note: string };
+export type RawProposal = { reportId: string; member: string; name: string; writer: string; donor: string; statusLabel: string; deadline: string; note: string };
 export type RawIssue = { reportId: string; member: string; siteCode: string; description: string; actionNeeded: string; pic: string };
 export type RawPriority = { reportId: string; member: string; priorityNo: string; siteCode: string; activity: string; pic: string; deadline: string };
 export type RawDeadline = { reportId: string; member: string; date: string; event: string; siteDonor: string; pic: string };
@@ -423,10 +473,13 @@ export async function getMonthRawRows(month: string): Promise<{
         numActs: activitiesList.length || parseInt(s.Num_Acts, 10) || 0,
         activitiesList,
         desc: s.Activities_Notes,
-        notes: s.Notes_This_Month,
-        results: s.Results_Challenges,
+        keyActivities: s.Key_Activities,
+        keyResults: s.Key_Results,
+        difficulties: s.Difficulties_Challenges,
+        followUp: s.Follow_Up,
         plan: s.Next_Month_Plan,
         photos: parsePhotos(s.Photos_JSON),
+        relatedDocs: parseDocs(s.Related_Docs_JSON),
       };
     });
 
@@ -436,6 +489,8 @@ export async function getMonthRawRows(month: string): Promise<{
       reportId: p.Report_ID,
       member: idToMember.get(p.Report_ID) || "",
       name: p.Proposal_Name,
+      writer: nameOf(p.Writer_UserID) || p.Writer_UserID || "",
+      donor: p.Donor || "",
       statusLabel: labelOf(PROPOSAL_STATUSES, p.Status_Code, "vi"),
       deadline: p.Deadline,
       note: p.Note || p.Short_Note,

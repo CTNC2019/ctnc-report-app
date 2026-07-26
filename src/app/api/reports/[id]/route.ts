@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSession, isAdmin, isManager } from "@/lib/auth";
 import { deleteRowsByKey, readObjects } from "@/lib/sheets";
-import { parsePhotos } from "@/lib/reportData";
+import { parsePhotos, parseDocs } from "@/lib/reportData";
 
 // Child tables that store rows keyed by Report_ID. Deleting a report wipes the parent
 // row in Fact_Reports plus every child row across these tabs so no orphaned data remains.
@@ -44,6 +44,7 @@ export async function GET(_request: Request, ctx: { params: Promise<{ id: string
   }
 
   const member = users.find((u) => u.User_ID === report.User_ID);
+  const nameOf = (uid: string) => users.find((u) => u.User_ID === uid)?.Full_Name || uid;
 
   const sites = siteUpdates
     .filter((s) => s.Report_ID === id)
@@ -52,10 +53,13 @@ export async function GET(_request: Request, ctx: { params: Promise<{ id: string
       activities: activities
         .filter((a) => a.Report_ID === id && a.Site_Code === s.Site_Code)
         .map((a) => ({ activityType: a.Activity_Type, desc: a.Activity_Desc })),
-      notes: s.Notes_This_Month,
-      results: s.Results_Challenges,
+      keyActivities: s.Key_Activities,
+      keyResults: s.Key_Results,
+      difficulties: s.Difficulties_Challenges,
+      followUp: s.Follow_Up,
       plan: s.Next_Month_Plan,
       photos: parsePhotos(s.Photos_JSON),
+      relatedDocs: parseDocs(s.Related_Docs_JSON),
     }));
 
   return NextResponse.json({
@@ -69,7 +73,15 @@ export async function GET(_request: Request, ctx: { params: Promise<{ id: string
       sites,
       proposals: proposals
         .filter((p) => p.Report_ID === id)
-        .map((p) => ({ name: p.Proposal_Name, status: p.Status_Code, deadline: p.Deadline, note: p.Note || p.Short_Note })),
+        .map((p) => ({
+          name: p.Proposal_Name,
+          writer: p.Writer_UserID,
+          writerName: p.Writer_UserID ? nameOf(p.Writer_UserID) : "",
+          donor: p.Donor,
+          status: p.Status_Code,
+          deadline: p.Deadline,
+          note: p.Note || p.Short_Note,
+        })),
       reportItems: reportItems
         .filter((r) => r.Report_ID === id)
         .map((r) => ({ itemName: r.Item_Name, typeCode: r.Type_Code, statusUpdate: r.Status_Update, deadlineAction: r.Deadline_Action })),

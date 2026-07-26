@@ -66,8 +66,10 @@ export async function GET(request: Request) {
           "Khu vực": s.siteName,
           "Loại hoạt động": a.typeLabel,
           "Mô tả": a.desc,
-          "Ghi chú hoạt động trong tháng": s.notes,
-          "Kết quả & khó khăn": s.results,
+          "Hoạt động chính": s.keyActivities,
+          "Kết quả": s.keyResults,
+          "Khó khăn, thách thức": s.difficulties,
+          "Việc cần theo dõi": s.followUp,
           "Kế hoạch tháng tới": s.plan,
         }))
       : [
@@ -77,18 +79,33 @@ export async function GET(request: Request) {
             "Khu vực": s.siteName,
             "Loại hoạt động": "",
             "Mô tả": s.desc,
-            "Ghi chú hoạt động trong tháng": s.notes,
-            "Kết quả & khó khăn": s.results,
+            "Hoạt động chính": s.keyActivities,
+            "Kết quả": s.keyResults,
+            "Khó khăn, thách thức": s.difficulties,
+            "Việc cần theo dõi": s.followUp,
             "Kế hoạch tháng tới": s.plan,
           },
         ]
   );
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(siteDetailRows), "Chi_Tiet_Hoat_Dong");
 
+  const relatedDocRows = raw.siteUpdates.flatMap((s) =>
+    s.relatedDocs.map((d) => ({
+      "Mã báo cáo": s.reportId,
+      "Thành viên": s.member,
+      "Khu vực": s.siteName,
+      "Mô tả": d.label,
+      "Đường link": d.url,
+    }))
+  );
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(relatedDocRows.length ? relatedDocRows : [{ "Mã báo cáo": "", "Thành viên": "", "Khu vực": "", "Mô tả": "", "Đường link": "" }]), "Tai_Lieu_Lien_Quan");
+
   const proposalRows = raw.proposals.map((p) => ({
     "Mã báo cáo": p.reportId,
     "Thành viên": p.member,
     "Tên đề xuất": p.name,
+    "Người viết": p.writer,
+    "Nhà tài trợ": p.donor,
     "Trạng thái": p.statusLabel,
     "Hạn chót": p.deadline,
     "Ghi chú": p.note,

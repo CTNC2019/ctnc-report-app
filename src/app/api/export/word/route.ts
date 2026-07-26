@@ -93,19 +93,26 @@ export async function GET(request: Request) {
   for (let i = 0; i < SITES.length; i++) {
     const s = SITES[i];
     const up = bySite.get(s.code);
-    siteSections.push(h2(`1.${i + 1} ${siteName(SITES, s.code, "vi")}`));
-    siteSections.push(label("Số hoạt động / Number of activities"));
-    siteSections.push(body(String(up?.numActs || 0)));
-    siteSections.push(label("Hoạt động và ghi chú trong tháng / Activities and key notes"));
-    if (up?.notes) siteSections.push(body(up.notes));
+    siteSections.push(h2(`${i + 1}. ${siteName(SITES, s.code, "vi")} (${up?.numActs || 0} hoạt động / activities)`));
+
+    siteSections.push(label(`${i + 1}.1. Hoạt động chính / Key activities`));
+    if (up?.keyActivities) siteSections.push(body(up.keyActivities));
     if (up?.activitiesList.length) {
       up.activitiesList.forEach((a) => siteSections.push(new Paragraph({ bullet: { level: 0 }, children: [new TextRun({ text: `${a.typeLabel}${a.desc ? " — " + a.desc : ""}`, size: 20 })] })));
-    } else if (!up?.notes) {
+    } else if (!up?.keyActivities) {
       siteSections.push(body(up?.desc || "—"));
     }
-    siteSections.push(label("Kết quả, thách thức, việc cần theo dõi / Key results, challenges or follow-up"));
-    siteSections.push(body(up?.results || "—"));
-    siteSections.push(label("Ảnh và tài liệu minh họa / Photos and supporting materials"));
+
+    siteSections.push(label(`${i + 1}.2. Kết quả / Key results`));
+    siteSections.push(body(up?.keyResults || "—"));
+
+    siteSections.push(label(`${i + 1}.3. Khó khăn, thách thức / Difficulties, challenges`));
+    siteSections.push(body(up?.difficulties || "—"));
+
+    siteSections.push(label(`${i + 1}.4. Việc cần theo dõi / Follow-up`));
+    siteSections.push(body(up?.followUp || "—"));
+
+    siteSections.push(label(`${i + 1}.5. Hình ảnh hoạt động / Activity images`));
     if (up?.photos.length) {
       for (const p of up.photos) {
         const img = await fetchImage(p.url);
@@ -123,7 +130,17 @@ export async function GET(request: Request) {
     } else {
       siteSections.push(italic("Không có ảnh đính kèm."));
     }
-    siteSections.push(label("Kế hoạch tháng tới / Plan for next month"));
+
+    siteSections.push(label(`${i + 1}.6. Tài liệu liên quan / Related documents`));
+    if (up?.relatedDocs.length) {
+      up.relatedDocs.forEach((d) =>
+        siteSections.push(new Paragraph({ bullet: { level: 0 }, children: [new TextRun({ text: `${d.label || d.url}${d.label ? " — " + d.url : ""}`, size: 20, color: "0563C1", underline: {} })] }))
+      );
+    } else {
+      siteSections.push(italic("Không có tài liệu liên quan."));
+    }
+
+    siteSections.push(label(`${i + 1}.7. Kế hoạch tháng tới / Plan for next month`));
     siteSections.push(body(up?.plan || "—"));
   }
 
@@ -144,18 +161,18 @@ export async function GET(request: Request) {
             [[data.month, data.members.find((m) => m.reportId)?.name || me.name || "-", new Date().toLocaleDateString("vi-VN")]]
           ),
 
-          h1("1. Tổng quan hoạt động theo khu vực / Monthly overview by site"),
+          h1("I. Tổng quan hoạt động theo khu vực / Monthly overview by site"),
           ...siteSections,
 
-          h1("2. Đề xuất / Proposals"),
+          h1("II. Đề xuất dự án / Project Proposal"),
           raw.proposals.length
             ? dataTable(
-                ["Đề xuất / Donor", "Trạng thái", "Hạn chót", "Ghi chú / hành động tiếp theo"],
-                raw.proposals.map((p) => [p.name, p.statusLabel, p.deadline, p.note])
+                ["Tên đề xuất", "Người viết", "Nhà tài trợ", "Trạng thái", "Hạn chót", "Ghi chú / hành động tiếp theo"],
+                raw.proposals.map((p) => [p.name, p.writer, p.donor, p.statusLabel, p.deadline, p.note])
               )
             : italic("Không có đề xuất trong tháng."),
 
-          h1("3. Báo cáo & cập nhật dữ liệu / Reports and data updates"),
+          h1("III. Báo cáo & cập nhật dữ liệu / Reports and data updates"),
           raw.reportsData.length
             ? dataTable(
                 ["Báo cáo / bộ dữ liệu", "Loại", "Tiến độ / cập nhật", "Hạn chót & hành động"],
@@ -163,7 +180,7 @@ export async function GET(request: Request) {
               )
             : italic("Không có mục nào trong tháng."),
 
-          h1("4. Truyền thông với donor & công chúng / Donor communication and public communications"),
+          h1("IV. Truyền thông / Communications"),
           dataTable(
             ["Kênh", "Số lượng hoàn thành", "Diễn ra trong tháng", "Kế hoạch tháng tới"],
             raw.comms.length
@@ -171,7 +188,7 @@ export async function GET(request: Request) {
               : [["—", "0", "—", "—"]]
           ),
 
-          h1("5. Vấn đề cần hỗ trợ / Key challenges or support needed"),
+          h1("V. Vấn đề cần hỗ trợ / Key challenges or support needed"),
           raw.issues.length
             ? dataTable(
                 ["Vấn đề", "Khu vực / hạng mục", "Hành động / hỗ trợ cần thiết", "Người phụ trách"],
@@ -179,7 +196,7 @@ export async function GET(request: Request) {
               )
             : italic("Không có vấn đề nào được ghi nhận."),
 
-          h1("6. Ưu tiên chính tháng tới / Main priorities for next month"),
+          h1("VI. Ưu tiên chính tháng tới / Main priorities for next month"),
           raw.priorities.length
             ? dataTable(
                 ["Ưu tiên", "Khu vực / hạng mục", "Hoạt động dự kiến", "Người phụ trách", "Hạn chót"],
@@ -187,7 +204,7 @@ export async function GET(request: Request) {
               )
             : italic("Chưa xác định ưu tiên cho tháng tới."),
 
-          h1("7. Deadline quan trọng tháng tới / Important deadlines next month"),
+          h1("VII. Deadline quan trọng tháng tới / Important deadlines next month"),
           raw.deadlines.length
             ? dataTable(
                 ["Ngày", "Deadline / sự kiện", "Khu vực / Donor", "Người phụ trách"],
