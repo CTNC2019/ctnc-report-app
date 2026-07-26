@@ -18,14 +18,21 @@ function drawTable(doc: PDFKit.PDFDocument, x: number, startY: number, colWidths
   const pageBottom = doc.page.height - bottomMargin;
 
   function drawHeader() {
-    doc.font("Bold").fontSize(9).fillColor("#FFFFFF");
-    doc.rect(x, y, colWidths.reduce((a, b) => a + b, 0), rowHeight).fill(ACCENT);
+    // Measure wrapped header height the same way data rows do below — a header label
+    // that doesn't fit a narrow column on one line (e.g. "SL hoàn thành", "Hạn chót")
+    // was previously clipped by a fixed-height band, spilling its second line into the
+    // first data row underneath it.
+    doc.font("Bold").fontSize(9);
+    const headerTexts = headers.map((h, i) => doc.heightOfString(h, { width: colWidths[i] - 8 }));
+    const hH = Math.max(rowHeight, Math.max(...headerTexts) + 8);
+    doc.fillColor("#FFFFFF");
+    doc.rect(x, y, colWidths.reduce((a, b) => a + b, 0), hH).fill(ACCENT);
     let cx = x;
     headers.forEach((h, i) => {
-      doc.fillColor("#FFFFFF").text(h, cx + 4, y + 6, { width: colWidths[i] - 8, ellipsis: true });
+      doc.fillColor("#FFFFFF").text(h, cx + 4, y + 6, { width: colWidths[i] - 8 });
       cx += colWidths[i];
     });
-    y += rowHeight;
+    y += hH;
   }
 
   drawHeader();
@@ -150,13 +157,23 @@ export async function GET(request: Request) {
 
     label(`${i + 1}.5. Hình ảnh hoạt động / Activity images`);
     if (up?.photos.length) {
+      const IMG_BOX_H = 140;
       for (const p of up.photos) {
         const buf = await fetchImageBuffer(p.url);
         if (buf) {
-          ensureSpace(160);
+          ensureSpace(IMG_BOX_H + 30);
           try {
-            doc.image(buf, left, doc.y + 4, { fit: [220, 140] });
-            doc.moveDown(8);
+            const imgY = doc.y + 4;
+            doc.image(buf, left, imgY, { fit: [220, IMG_BOX_H] });
+            // doc.image() draws at an absolute position and does NOT advance doc.y on
+            // its own — the previous code used moveDown(8), which moves by 8 text
+            // *lines* rather than the image's actual height, so whatever was drawn
+            // next (caption, then the following label/section) started while still
+            // inside the image's box and rendered on top of it. Advance by the fixed
+            // box height itself instead — deterministic and always ≥ the image's
+            // actual rendered height, since `fit` never exceeds it.
+            doc.y = imgY + IMG_BOX_H + 8;
+            if (p.caption) italicText(p.caption);
           } catch {
             italicText(`${p.caption || "Ảnh"}: ${p.url}`);
           }

@@ -166,7 +166,11 @@ function FormInner() {
       });
   }, [editId, masterData]);
 
-  const reportId = user ? `${user.id}-${month.replace("/", "")}` : "…";
+  // Only meaningful as a real, stable identifier when editing an existing report
+  // (editId). For a brand-new report the final id is assigned server-side on save —
+  // it may get a numbered suffix if this member already has another report for the
+  // same month — so we deliberately do not fabricate a preview id that could mislead.
+  const reportId = editId || (user ? `${user.id}-${month.replace("/", "")}` : "…");
   const stepTitles = [
     t("form.step.general"),
     t("form.step.sites"),
@@ -312,7 +316,11 @@ function FormInner() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                   <div>
                     <label className={labelCls}>{t("form.reportId")}</label>
-                    <input disabled value={reportId} className={inputCls + " opacity-70 cursor-not-allowed font-mono"} />
+                    {editId ? (
+                      <input disabled value={reportId} className={inputCls + " opacity-70 cursor-not-allowed font-mono"} />
+                    ) : (
+                      <input disabled value={t("form.reportIdAuto")} className={inputCls + " opacity-70 cursor-not-allowed italic text-sm"} />
+                    )}
                   </div>
                   <div>
                     <label className={labelCls}>{t("form.month")}</label>
@@ -695,7 +703,9 @@ function FormInner() {
               <motion.div key="s9-confirm" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
                 <h2 className="text-2xl font-bold text-white mb-2">{t("form.step.review")}</h2>
                 <div className="p-5 bg-slate-800/50 border border-slate-700 rounded-2xl text-sm text-slate-300 space-y-1">
-                  <p><b className="text-white font-mono">{reportId}</b> · {month}</p>
+                  <p>
+                    <b className="text-white font-mono">{editId ? reportId : t("form.reportIdAuto")}</b> · {month}
+                  </p>
                   <p className="text-slate-400">{t("form.step.sites")}: {sites.reduce((n, s) => n + s.activities.length, 0)} {lang === "en" ? "activities" : "hoạt động"}</p>
                   <p className="text-slate-400">{t("form.step.proposals")}: {proposals.length}</p>
                   <p className="text-slate-400">{t("form.step.reportsdata")}: {reportItems.length}</p>

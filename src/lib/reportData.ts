@@ -192,8 +192,17 @@ export async function getFullDashboardData(month?: string): Promise<DashboardDat
   const nameOf = (uid: string) => users.find((u) => u.User_ID === uid)?.Full_Name || uid;
 
   // --- Members table ---
+  // A member can now have more than one report for the same month (each "Tạo báo cáo
+  // mới" creates an independent report rather than silently overwriting an existing
+  // one) — pick the most recently touched one to represent that member's status here;
+  // the Reports list page and the export/aggregation totals below still include all of
+  // them, nothing is hidden or dropped, this only affects which single status chip
+  // shows on the Dashboard's member grid.
   const members: MemberStatus[] = activeUsers.map((u) => {
-    const rep = monthReports.find((r) => r.User_ID === u.User_ID);
+    const userReports = monthReports
+      .filter((r) => r.User_ID === u.User_ID)
+      .sort((a, b) => (b.Submitted_At || b.Date_Prepared || "").localeCompare(a.Submitted_At || a.Date_Prepared || ""));
+    const rep = userReports[0];
     const acts = rep
       ? siteUpdates.filter((s) => s.Report_ID === rep.Report_ID).reduce((sum, s) => sum + (parseInt(s.Num_Acts, 10) || 0), 0)
       : 0;

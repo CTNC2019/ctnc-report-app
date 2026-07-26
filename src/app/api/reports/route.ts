@@ -63,10 +63,23 @@ export async function POST(request: Request) {
   if (!month) return NextResponse.json({ error: "missing month" }, { status: 400 });
 
   const targetUserId: string = isManager(me) && body.userId ? body.userId : me.id;
-  const reportId: string = body.reportId || `${targetUserId}-${month.replace("/", "")}`;
   const status: string = body.status === "Submitted" ? "Submitted" : "Draft";
 
   const existing = await readObjects("Fact_Reports");
+
+  // A brand-new report (no reportId from the client — that only happens when editing
+  // an existing one via ?id=) must never collide with a report already on file for the
+  // same member + month. The old scheme derived the id purely from userId+month, so a
+  // second "Tạo báo cáo mới" for a month that already had a report silently overwrote
+  // it instead of creating an independent one. Give every genuinely-new report its own
+  // id: the plain "user-month" id if that slot is free, otherwise a numbered suffix.
+  let reportId: string = body.reportId;
+  if (!reportId) {
+    const base = `${targetUserId}-${month.replace("/", "")}`;
+    const sameSlot = existing.filter((r) => r.Report_ID === base || r.Report_ID.startsWith(base + "-"));
+    reportId = sameSlot.length === 0 ? base : `${base}-${sameSlot.length + 1}`;
+  }
+
   const current = existing.find((r) => r.Report_ID === reportId);
   if (current && current.User_ID !== targetUserId && !isManager(me)) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
