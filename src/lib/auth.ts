@@ -8,6 +8,8 @@ export type SessionUser = {
   name: string;
   role: string; // admin | manager | staff
   email: string;
+  avatarUrl?: string;
+  remember?: boolean; // whether the 30-day "remember me" cookie duration should be reapplied on reissue
 };
 
 function secret(): string {
@@ -46,4 +48,9 @@ export async function getSession(): Promise<SessionUser | null> {
 
 export function isManager(u: SessionUser | null): boolean {
   return !!u && (u.role === "admin" || u.role === "manager");
+}
+
+/** Full user administration (create/deactivate/delete/role changes) is admin-only. */
+export function isAdmin(u: SessionUser | null): boolean {
+  return !!u && u.role === "admin";
 }

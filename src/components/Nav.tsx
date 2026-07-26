@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BarChart3, LayoutDashboard, FileText, CheckSquare, Users, LogOut } from "lucide-react";
+import { BarChart3, LayoutDashboard, FileText, CheckSquare, Users, LogOut, UserCircle } from "lucide-react";
 import { useLanguage } from "@/context/LanguageContext";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
 import { useSession } from "@/hooks/useSession";
@@ -10,13 +10,15 @@ import { useSession } from "@/hooks/useSession";
 export default function Nav() {
   const { t } = useLanguage();
   const pathname = usePathname();
-  const { user, isManager } = useSession();
+  const { user, isManager, isAdmin } = useSession();
 
   const links = [
     { href: "/dashboard", label: t("nav.dashboard"), icon: LayoutDashboard },
     { href: "/reports", label: t("nav.reports"), icon: FileText },
     ...(isManager ? [{ href: "/approve", label: t("nav.approve"), icon: CheckSquare }] : []),
-    ...(isManager ? [{ href: "/members", label: t("nav.members"), icon: Users }] : []),
+    // User administration (create/deactivate/delete/role changes) is admin-only.
+    ...(isAdmin ? [{ href: "/members", label: t("nav.members"), icon: Users }] : []),
+    ...(user ? [{ href: "/profile", label: t("nav.profile"), icon: UserCircle }] : []),
   ];
 
   async function logout() {
@@ -56,12 +58,20 @@ export default function Nav() {
           <div className="flex gap-4 items-center">
             <LanguageSwitcher />
             {user && (
-              <span className="text-sm text-slate-400 hidden sm:inline">
-                {t("dash.greeting")} <b className="text-white">{user.name}</b>{" "}
-                <span className="text-xs px-2 py-0.5 rounded-md bg-slate-800 border border-slate-700 text-slate-400">
-                  {t("role." + user.role) !== "role." + user.role ? t("role." + user.role) : user.role}
+              <Link href="/profile" className="flex items-center gap-2 group">
+                {user.avatarUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={user.avatarUrl} alt={user.name} className="w-8 h-8 rounded-full object-cover border border-white/10 group-hover:border-emerald-500/50" />
+                ) : (
+                  <UserCircle className="w-8 h-8 text-slate-500 group-hover:text-emerald-400" />
+                )}
+                <span className="text-sm text-slate-400 hidden sm:inline">
+                  {t("dash.greeting")} <b className="text-white group-hover:text-emerald-300">{user.name}</b>{" "}
+                  <span className="text-xs px-2 py-0.5 rounded-md bg-slate-800 border border-slate-700 text-slate-400">
+                    {t("role." + user.role) !== "role." + user.role ? t("role." + user.role) : user.role}
+                  </span>
                 </span>
-              </span>
+              </Link>
             )}
             <button
               onClick={logout}

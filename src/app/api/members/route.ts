@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
-import { getSession, isManager } from "@/lib/auth";
+import { getSession, isAdmin } from "@/lib/auth";
 import { appendObjects, readObjects } from "@/lib/sheets";
 
 export const runtime = "nodejs";
@@ -22,7 +22,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   const me = await getSession();
-  if (!me || !isManager(me)) return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  if (!me || !isAdmin(me)) return NextResponse.json({ error: "forbidden" }, { status: 403 });
 
   const body = await request.json();
   const { userId, fullName, email, role, password } = body;

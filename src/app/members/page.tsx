@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Users, Plus, X } from "lucide-react";
+import { Users, Plus, X, Trash2 } from "lucide-react";
 import Nav from "@/components/Nav";
 import { useLanguage } from "@/context/LanguageContext";
+import { useSession } from "@/hooks/useSession";
 
 type Member = { id: string; name: string; email: string; role: string; active: boolean };
 
@@ -11,12 +12,14 @@ const EMPTY = { userId: "", fullName: "", email: "", role: "staff", password: ""
 
 export default function MembersPage() {
   const { t } = useLanguage();
+  const { user, isAdmin, loading } = useSession();
   const [rows, setRows] = useState<Member[] | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState(EMPTY);
   const [editing, setEditing] = useState<Member | null>(null);
   const [pw, setPw] = useState("");
   const [error, setError] = useState("");
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   function load() {
     fetch("/api/members")
@@ -54,6 +57,29 @@ export default function MembersPage() {
     setEditing(null);
     setPw("");
     load();
+  }
+
+  async function deleteMember(id: string) {
+    if (!confirm(t("members.deleteConfirm"))) return;
+    setDeletingId(id);
+    const res = await fetch(`/api/members/${id}`, { method: "DELETE" });
+    setDeletingId(null);
+    if (res.ok) load();
+    else {
+      const data = await res.json().catch(() => ({}));
+      alert(data.error === "cannot delete yourself" ? t("members.deleteSelfError") : data.error || "Error");
+    }
+  }
+
+  if (!loading && !isAdmin) {
+    return (
+      <div className="min-h-screen bg-slate-900 text-slate-200">
+        <Nav />
+        <main className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-16 text-center">
+          <p className="text-slate-400">{t("members.adminOnlyNote")}</p>
+        </main>
+      </div>
+    );
   }
 
   return (
@@ -97,12 +123,22 @@ export default function MembersPage() {
                   <td className="px-5 py-3 text-slate-400">{m.email}</td>
                   <td className="px-5 py-3">{m.active ? "✅" : "⛔"}</td>
                   <td className="px-5 py-3">
-                    <button
-                      onClick={() => setEditing(m)}
-                      className="text-xs px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700"
-                    >
-                      {t("reports.edit")}
-                    </button>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setEditing(m)}
+                        className="text-xs px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700"
+                      >
+                        {t("reports.edit")}
+                      </button>
+                      <button
+                        onClick={() => deleteMember(m.id)}
+                        disabled={m.id === user?.id || deletingId === m.id}
+                        title={m.id === user?.id ? t("members.deleteSelfError") : t("members.delete")}
+                        className="text-xs px-3 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-300 disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-1.5"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}

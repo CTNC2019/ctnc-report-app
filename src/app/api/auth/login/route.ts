@@ -13,8 +13,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: "missing" }, { status: 400 });
     }
     const users = await readObjects("Dim_Users");
+    // Login accepts either the work email (primary, current convention) or the legacy
+    // internal User_ID (e.g. CTNC-01) so older bookmarks/muscle memory keep working.
+    const identifier = String(userId).trim().toLowerCase();
     const u = users.find(
-      (x) => (x.User_ID || "").trim().toLowerCase() === String(userId).trim().toLowerCase()
+      (x) =>
+        (x.Email || "").trim().toLowerCase() === identifier ||
+        (x.User_ID || "").trim().toLowerCase() === identifier
     );
     const inactive = ["false", "0", "no"].includes((u?.Is_Active ?? "").trim().toLowerCase());
     if (!u || !u.Password_Hash || inactive) {
@@ -29,6 +34,8 @@ export async function POST(request: Request) {
       name: u.Full_Name || u.User_ID,
       role: (u.Role || "staff").toLowerCase(),
       email: u.Email || "",
+      avatarUrl: u.Avatar_URL || "",
+      remember: !!remember,
     };
     const store = await cookies();
     const cookieOpts: Parameters<typeof store.set>[2] = {

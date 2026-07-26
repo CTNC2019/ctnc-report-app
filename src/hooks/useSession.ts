@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 
-export type SessionUser = { id: string; name: string; role: string; email: string };
+export type SessionUser = { id: string; name: string; role: string; email: string; avatarUrl?: string };
 
 export function useSession() {
   const [user, setUser] = useState<SessionUser | null | undefined>(undefined); // undefined = loading
@@ -12,5 +12,6 @@ export function useSession() {
       .catch(() => setUser(null));
   }, []);
   const isManager = user ? user.role === "admin" || user.role === "manager" : false;
-  return { user, loading: user === undefined, isManager };
+  const isAdmin = user ? user.role === "admin" : false;
+  return { user, loading: user === undefined, isManager, isAdmin };
 }
