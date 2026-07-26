@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getSession, isAdmin, isManager } from "@/lib/auth";
+import { getSession, getLiveSession, isAdmin } from "@/lib/auth";
 import { deleteRowsByKey, readObjects } from "@/lib/sheets";
 import { parsePhotos, parseDocs } from "@/lib/reportData";
 
@@ -20,7 +20,9 @@ const CHILD_TABLES = [
 export const runtime = "nodejs";
 
 export async function GET(_request: Request, ctx: { params: Promise<{ id: string }> }) {
-  const me = await getSession();
+  const session = await getSession();
+  if (!session) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const me = await getLiveSession(session);
   if (!me) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   const { id } = await ctx.params;
 
@@ -39,9 +41,8 @@ export async function GET(_request: Request, ctx: { params: Promise<{ id: string
 
   const report = reports.find((r) => r.Report_ID === id);
   if (!report) return NextResponse.json({ error: "not found" }, { status: 404 });
-  if (report.User_ID !== me.id && !isManager(me)) {
-    return NextResponse.json({ error: "forbidden" }, { status: 403 });
-  }
+  // View access is open to any signed-in member (staff included) — only editing and
+  // deleting someone else's report are restricted, enforced in POST/DELETE instead.
 
   const member = users.find((u) => u.User_ID === report.User_ID);
   const nameOf = (uid: string) => users.find((u) => u.User_ID === uid)?.Full_Name || uid;
@@ -106,7 +107,9 @@ export async function GET(_request: Request, ctx: { params: Promise<{ id: string
 // been Submitted/Approved/Returned, only an Admin can remove it — this preserves the
 // audit trail for reports that a Manager has already seen or approved.
 export async function DELETE(_request: Request, ctx: { params: Promise<{ id: string }> }) {
-  const me = await getSession();
+  const session = await getSession();
+  if (!session) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const me = await getLiveSession(session);
   if (!me) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   const { id } = await ctx.params;
 

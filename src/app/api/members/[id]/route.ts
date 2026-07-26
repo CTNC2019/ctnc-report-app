@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
-import { getSession, isAdmin } from "@/lib/auth";
+import { getSession, getLiveSession, isAdmin } from "@/lib/auth";
 import { deleteRowsByKey, updateObjectByKey } from "@/lib/sheets";
 
 export const runtime = "nodejs";
@@ -9,7 +9,8 @@ export const runtime = "nodejs";
 // active status, email, and password-reset for OTHER users. Self-service profile
 // edits (own name, avatar, password) go through /api/profile instead.
 export async function PATCH(request: Request, ctx: { params: Promise<{ id: string }> }) {
-  const me = await getSession();
+  const session = await getSession();
+  const me = await getLiveSession(session);
   if (!me || !isAdmin(me)) return NextResponse.json({ error: "forbidden" }, { status: 403 });
   const { id } = await ctx.params;
 
@@ -27,7 +28,8 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ id: strin
 }
 
 export async function DELETE(_request: Request, ctx: { params: Promise<{ id: string }> }) {
-  const me = await getSession();
+  const session = await getSession();
+  const me = await getLiveSession(session);
   if (!me || !isAdmin(me)) return NextResponse.json({ error: "forbidden" }, { status: 403 });
   const { id } = await ctx.params;
 

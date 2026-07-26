@@ -89,7 +89,8 @@ export default function ReportView({ params }: { params: Promise<{ id: string }>
   // Same rules as the reports list: owner can always edit their own report (an edit
   // naturally moves an Approved/Submitted report back into the review pipeline once
   // saved); owner can only delete while still a Draft; Admin can do either, anytime.
-  const canEdit = !!report && (report.userId === user?.id || isAdmin);
+  // Owner can always edit their own report; Manager/Admin can edit and approve anyone's.
+  const canEdit = !!report && (report.userId === user?.id || isManager);
   const canDelete = !!report && (isAdmin || (report.userId === user?.id && report.status === "Draft"));
 
   async function deleteReport() {

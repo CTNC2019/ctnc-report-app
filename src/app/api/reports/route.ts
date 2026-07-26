@@ -1,12 +1,14 @@
 import { NextResponse } from "next/server";
-import { getSession, isManager } from "@/lib/auth";
+import { getSession, getLiveSession, isManager } from "@/lib/auth";
 import { appendObjects, deleteRowsByKey, readObjects, updateObjectByKey } from "@/lib/sheets";
 import { stringifyPhotos, stringifyDocs, type PhotoItem, type DocLink } from "@/lib/reportData";
 
 export const runtime = "nodejs";
 
 export async function GET() {
-  const me = await getSession();
+  const session = await getSession();
+  if (!session) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const me = await getLiveSession(session);
   if (!me) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
   const [reports, users, siteUpdates] = await Promise.all([
@@ -15,7 +17,10 @@ export async function GET() {
     readObjects("Data_Site_Updates"),
   ]);
 
-  const visible = isManager(me) ? reports : reports.filter((r) => r.User_ID === me.id);
+  // Policy: every signed-in member can VIEW every report (transparency across the team).
+  // Edit/delete rights on someone else's report are enforced separately, per-action, in
+  // the POST/DELETE handlers below — staff never gets those, only view access here.
+  const visible = reports;
   const nameOf = (uid: string) => users.find((u) => u.User_ID === uid)?.Full_Name || uid;
 
   const list = visible
@@ -55,13 +60,18 @@ type PriorityIn = { priorityNo?: number; siteCode?: string; activity: string; pi
 type DeadlineIn = { date?: string; event: string; siteDonor?: string; pic?: string };
 
 export async function POST(request: Request) {
-  const me = await getSession();
+  const session = await getSession();
+  if (!session) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const me = await getLiveSession(session);
   if (!me) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
   const body = await request.json();
   const month: string = body.month;
   if (!month) return NextResponse.json({ error: "missing month" }, { status: 400 });
 
+  // targetUserId is only used to decide the owner of a BRAND NEW report (Manager/Admin
+  // creating one on someone else's behalf via an explicit body.userId). It must never be
+  // used to overwrite the owner of an EXISTING report — see the `current` branch below.
   const targetUserId: string = isManager(me) && body.userId ? body.userId : me.id;
   const status: string = body.status === "Submitted" ? "Submitted" : "Draft";
 
@@ -81,14 +91,21 @@ export async function POST(request: Request) {
   }
 
   const current = existing.find((r) => r.Report_ID === reportId);
-  if (current && current.User_ID !== targetUserId && !isManager(me)) {
+
+  // Editing an existing report: only the original owner, or a Manager/Admin acting on
+  // their behalf (to correct content or approve), may save. Staff can never edit a
+  // report they don't own — per policy, they have view-only access to others' reports.
+  if (current && current.User_ID !== me.id && !isManager(me)) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 
   const now = new Date().toISOString();
   const reportRow = {
     Report_ID: reportId,
-    User_ID: targetUserId,
+    // Ownership must never change just because someone else (a Manager/Admin fixing or
+    // approving the report) hit Save. Preserve the original owner on every update; the
+    // targetUserId computed above only applies when a genuinely new report is created.
+    User_ID: current ? current.User_ID : targetUserId,
     Reporting_Month: month,
     Date_Prepared: current?.Date_Prepared || now,
     Submitted_At: status === "Submitted" ? now : current?.Submitted_At || "",

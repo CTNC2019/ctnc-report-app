@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import { cookies } from "next/headers";
+import { readObjects } from "@/lib/sheets";
 
 export const SESSION_COOKIE = "ctnc_session";
 
@@ -53,4 +54,26 @@ export function isManager(u: SessionUser | null): boolean {
 /** Full user administration (create/deactivate/delete/role changes) is admin-only. */
 export function isAdmin(u: SessionUser | null): boolean {
   return !!u && u.role === "admin";
+}
+
+/**
+ * The session cookie bakes the user's role in at login time and is never re-verified
+ * against the sheet on subsequent requests. That means if an Admin changes someone's
+ * role (e.g. demotes a manager to staff), the demoted user keeps their old, more
+ * permissive role in their *current* session until they log out and back in.
+ *
+ * For actions that cross ownership boundaries (editing/deleting someone else's data,
+ * managing other members' accounts) that staleness window is a real permission gap.
+ * getLiveSession() re-reads the user's role straight from Dim_Users so these checks
+ * always reflect the current, authoritative permission — no re-login required.
+ * It also returns null for a user who has since been deactivated or removed.
+ */
+export async function getLiveSession(me: SessionUser | null): Promise<SessionUser | null> {
+  if (!me) return null;
+  const users = await readObjects("Dim_Users");
+  const row = users.find((u) => u.User_ID === me.id);
+  if (!row) return null;
+  const active = (row.Is_Active ?? "true").trim().toLowerCase() !== "false";
+  if (!active) return null;
+  return { ...me, role: row.Role || me.role };
 }

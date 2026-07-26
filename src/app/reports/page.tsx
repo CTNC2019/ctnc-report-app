@@ -25,7 +25,7 @@ const STATUS_STYLE: Record<string, string> = {
 
 export default function ReportsList() {
   const { t } = useLanguage();
-  const { user, isAdmin } = useSession();
+  const { user, isAdmin, isManager } = useSession();
   const [rows, setRows] = useState<ReportRow[] | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
@@ -40,8 +40,10 @@ export default function ReportsList() {
   // Approved/Submitted report naturally moves it back into the review pipeline once
   // saved, since the form re-submits with a fresh Draft/Submitted status. Admins can
   // also fix anyone's report.
+  // Owner can always edit their own report; Manager/Admin can edit and approve anyone's.
+  // Staff without ownership only gets view access (no Edit control rendered for them).
   function canEdit(r: ReportRow): boolean {
-    return r.userId === user?.id || isAdmin;
+    return r.userId === user?.id || isManager;
   }
 
   // Delete: the owner may only delete their own Draft (nothing has been submitted for

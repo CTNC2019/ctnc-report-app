@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
-import { getSession, isManager } from "@/lib/auth";
+import { getSession, getLiveSession, isManager } from "@/lib/auth";
 import { readObjects, updateObjectByKey } from "@/lib/sheets";
 
 export const runtime = "nodejs";
 
 export async function PATCH(request: Request, ctx: { params: Promise<{ id: string }> }) {
-  const me = await getSession();
+  const session = await getSession();
+  const me = await getLiveSession(session);
   if (!me || !isManager(me)) return NextResponse.json({ error: "forbidden" }, { status: 403 });
   const { id } = await ctx.params;
   const { status } = await request.json();
