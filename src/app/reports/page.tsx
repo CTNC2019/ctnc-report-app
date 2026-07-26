@@ -7,12 +7,14 @@ import Nav from "@/components/Nav";
 import { useLanguage } from "@/context/LanguageContext";
 import { useSession } from "@/hooks/useSession";
 import { Button, Badge, Card, PageHeader, EmptyState, Skeleton } from "@/components/ui";
+import { formatDisplayDate } from "@/lib/dateRange";
 
 type ReportRow = {
   id: string;
   userId: string;
   member: string;
-  month: string;
+  startDate: string;
+  endDate: string;
   status: string;
   totalActivities: number;
 };
@@ -107,7 +109,7 @@ export default function ReportsList() {
                   <tr key={r.id} className="border-b border-border-subtle last:border-0 hover:bg-canvas transition-colors">
                     <td className="px-5 py-3 font-mono text-primary-700">{r.id}</td>
                     <td className="px-5 py-3 text-ink">{r.member}</td>
-                    <td className="px-5 py-3 text-ink-secondary">{r.month}</td>
+                    <td className="px-5 py-3 text-ink-secondary">{formatDisplayDate(r.startDate)} – {formatDisplayDate(r.endDate)}</td>
                     <td className="px-5 py-3 text-ink-secondary">{r.totalActivities}</td>
                     <td className="px-5 py-3">
                       <Badge tone={STATUS_TONE[r.status] || "neutral"}>{t("status." + r.status.toLowerCase())}</Badge>

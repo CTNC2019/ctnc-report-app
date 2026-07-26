@@ -26,34 +26,42 @@ import {
 export default function Dashboard() {
   const { t, lang } = useLanguage();
   const [data, setData] = useState<DashboardData | null>(null);
-  const [month, setMonth] = useState<string | null>(null);
+  const [startDate, setStartDate] = useState<string | null>(null);
+  const [endDate, setEndDate] = useState<string | null>(null);
   const [exporting, setExporting] = useState<string | null>(null);
 
-  // Re-fetch whenever the VI/EN language toggle changes too, not just the month —
+  // Re-fetch whenever the VI/EN language toggle changes too, not just the period —
   // otherwise chart labels (activity type, comm channel, proposal status) stay stuck
   // in whichever language the page first loaded in, since the server bakes the label
   // text into the response instead of the client translating it.
   useEffect(() => {
     const params = new URLSearchParams();
-    if (month) params.set("month", month);
+    if (startDate) params.set("startDate", startDate);
+    if (endDate) params.set("endDate", endDate);
     params.set("lang", lang);
     fetch(`/api/dashboard?${params.toString()}`)
       .then((r) => r.json())
       .then((d: DashboardData) => {
         setData(d);
-        if (!month) setMonth(d.month);
+        if (!startDate) setStartDate(d.startDate);
+        if (!endDate) setEndDate(d.endDate);
       })
       .catch(() => {});
-  }, [month, lang]);
+  }, [startDate, endDate, lang]);
 
   function exportFile(format: "excel" | "word" | "pdf") {
     if (!data) return;
     setExporting(format);
-    const url = `/api/export/${format}?month=${encodeURIComponent(data.month)}`;
+    const url = `/api/export/${format}?startDate=${encodeURIComponent(data.startDate)}&endDate=${encodeURIComponent(data.endDate)}&lang=${lang}`;
     const a = document.createElement("a");
     a.href = url;
     a.click();
     setTimeout(() => setExporting(null), 1500);
+  }
+
+  function pickRange(r: { startDate: string; endDate: string }) {
+    setStartDate(r.startDate);
+    setEndDate(r.endDate);
   }
 
   return (
@@ -64,17 +72,35 @@ export default function Dashboard() {
         <div className="max-w-7xl mx-auto">
           <PageHeader
             title={t("dash.title")}
-            subtitle={`${t("dash.subtitleShort")} — ${data?.month || ""}`}
+            subtitle={`${t("dash.subtitleShort")} — ${data ? `${data.startDate} → ${data.endDate}` : ""}`}
             actions={
               data && (
                 <>
                   <select
-                    value={data.month}
-                    onChange={(e) => setMonth(e.target.value)}
+                    value={`${data.startDate}|${data.endDate}`}
+                    onChange={(e) => {
+                      const found = data.availableRanges.find((r) => `${r.startDate}|${r.endDate}` === e.target.value);
+                      if (found) pickRange(found);
+                    }}
                     className="bg-surface border border-border-subtle text-ink text-sm rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500 shadow-sm"
                   >
-                    {data.availableMonths.map((m) => <option key={m} value={m}>{m}</option>)}
+                    {data.availableRanges.map((r) => (
+                      <option key={`${r.startDate}|${r.endDate}`} value={`${r.startDate}|${r.endDate}`}>{r.label}</option>
+                    ))}
                   </select>
+                  <input
+                    type="date"
+                    value={data.startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    className="bg-surface border border-border-subtle text-ink text-sm rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500 shadow-sm"
+                  />
+                  <span className="text-ink-secondary text-sm">–</span>
+                  <input
+                    type="date"
+                    value={data.endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    className="bg-surface border border-border-subtle text-ink text-sm rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-500 shadow-sm"
+                  />
                   <div className="flex items-center gap-1.5 bg-surface border border-border-subtle rounded-xl p-1.5 shadow-sm">
                     <button disabled={exporting !== null} onClick={() => exportFile("excel")} title={t("dash.exportExcel")} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-primary-700 hover:bg-primary-50 disabled:opacity-50 transition-colors">
                       <FileSpreadsheet className="w-4 h-4" /> Excel

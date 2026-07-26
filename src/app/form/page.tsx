@@ -7,6 +7,7 @@ import { ArrowLeft, ArrowRight, Save, Send, CheckCircle, Plus, Trash2, Upload, X
 import Link from "next/link";
 import { useLanguage } from "@/context/LanguageContext";
 import { useSession } from "@/hooks/useSession";
+import { currentMonthRange, validateDateRange, formatDisplayDate } from "@/lib/dateRange";
 
 // Dropdown labels (sites, activity types...) are sheet-driven: fetched from
 // /api/master-data (which reads the "Master_Data" Google Sheet tab) instead of being
@@ -45,11 +46,6 @@ type DeadlineItem = { key: number; date: string; event: string; siteDonor: strin
 let seq = 1;
 const nextKey = () => seq++;
 
-function nowMonth() {
-  const d = new Date();
-  return String(d.getMonth() + 1).padStart(2, "0") + "/" + d.getFullYear();
-}
-
 function emptySites(sites: MasterItem[]): SiteEntry[] {
   return sites.map((s) => ({
     siteCode: s.code,
@@ -86,7 +82,8 @@ function FormInner() {
   const [loaded, setLoaded] = useState(false);
   const [masterData, setMasterData] = useState<MasterData | null>(null);
   const [members, setMembers] = useState<{ id: string; name: string }[]>([]);
-  const [month, setMonth] = useState(nowMonth());
+  const [startDate, setStartDate] = useState<string>(() => currentMonthRange().startDate);
+  const [endDate, setEndDate] = useState<string>(() => currentMonthRange().endDate);
   const [activeSite, setActiveSite] = useState(0);
 
   const [sites, setSites] = useState<SiteEntry[]>([]);
@@ -134,7 +131,9 @@ function FormInner() {
       .then((d) => {
         const rep = d.report;
         if (!rep) return;
-        setMonth(rep.month || nowMonth());
+        const fallback = currentMonthRange();
+        setStartDate(rep.startDate || fallback.startDate);
+        setEndDate(rep.endDate || fallback.endDate);
         if (rep.sites?.length) {
           setSites(
             masterData.sites.map((s) => {
@@ -171,8 +170,10 @@ function FormInner() {
   // Only meaningful as a real, stable identifier when editing an existing report
   // (editId). For a brand-new report the final id is assigned server-side on save —
   // it may get a numbered suffix if this member already has another report for the
-  // same month — so we deliberately do not fabricate a preview id that could mislead.
-  const reportId = editId || (user ? `${user.id}-${month.replace("/", "")}` : "…");
+  // same reporting period — so we deliberately do not fabricate a preview id that
+  // could mislead.
+  const reportId = editId || (user ? `${user.id}-${startDate.replace(/-/g, "")}` : "…");
+  const rangeError = validateDateRange(startDate, endDate);
   const stepTitles = [
     t("form.step.general"),
     t("form.step.sites"),
@@ -243,6 +244,10 @@ function FormInner() {
   const removeDeadline = (key: number) => setDeadlines((s) => s.filter((x) => x.key !== key));
 
   async function persist(status: "Draft" | "Submitted") {
+    if (validateDateRange(startDate, endDate)) {
+      alert(t("form.dateRangeError"));
+      return;
+    }
     setIsSubmitting(true);
     try {
       const res = await fetch("/api/reports", {
@@ -250,7 +255,8 @@ function FormInner() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           reportId: editId || undefined,
-          month,
+          startDate,
+          endDate,
           status,
           sites: sites.map((s) => ({
             siteCode: s.siteCode,
@@ -325,8 +331,13 @@ function FormInner() {
                     )}
                   </div>
                   <div>
-                    <label className={labelCls}>{t("form.month")}</label>
-                    <input type="text" value={month} onChange={(e) => setMonth(e.target.value)} className={inputCls} />
+                    <label className={labelCls}>{t("form.startDate")}</label>
+                    <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className={inputCls} />
+                  </div>
+                  <div>
+                    <label className={labelCls}>{t("form.endDate")}</label>
+                    <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className={inputCls} />
+                    {rangeError && <p className="text-xs text-danger mt-1">{t(`form.dateRangeError.${rangeError}`)}</p>}
                   </div>
                   <div>
                     <label className={labelCls}>{t("form.preparedBy")}</label>
@@ -706,7 +717,7 @@ function FormInner() {
                 <h2 className="text-2xl font-bold text-ink mb-2">{t("form.step.review")}</h2>
                 <div className="p-5 bg-canvas border border-border-subtle rounded-2xl text-sm text-ink-secondary space-y-1">
                   <p>
-                    <b className="text-ink font-mono">{editId ? reportId : t("form.reportIdAuto")}</b> · {month}
+                    <b className="text-ink font-mono">{editId ? reportId : t("form.reportIdAuto")}</b> · {formatDisplayDate(startDate)} – {formatDisplayDate(endDate)}
                   </p>
                   <p className="text-ink-secondary">{t("form.step.sites")}: {sites.reduce((n, s) => n + s.activities.length, 0)} {lang === "en" ? "activities" : "hoạt động"}</p>
                   <p className="text-ink-secondary">{t("form.step.proposals")}: {proposals.length}</p>

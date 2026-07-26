@@ -9,6 +9,7 @@ import CommentsThread from "@/components/CommentsThread";
 import { useLanguage } from "@/context/LanguageContext";
 import { useSession } from "@/hooks/useSession";
 import { Card, Button, Badge, EmptyState } from "@/components/ui";
+import { formatDisplayDate } from "@/lib/dateRange";
 
 type Activity = { activityType: string; desc: string };
 type SiteEntry = {
@@ -27,7 +28,8 @@ type ReportDetail = {
   id: string;
   userId: string;
   member: string;
-  month: string;
+  startDate: string;
+  endDate: string;
   status: string;
   sites: SiteEntry[];
   proposals: { name: string; writer: string; writerName: string; donor: string; status: string; deadline: string; note: string }[];
@@ -133,7 +135,7 @@ export default function ReportView({ params }: { params: Promise<{ id: string }>
               <div>
                 <h1 className="text-2xl font-bold text-ink font-mono">{report.id}</h1>
                 <p className="text-ink-secondary text-sm mt-1.5 flex items-center gap-2 flex-wrap">
-                  {report.member} · {report.month} <Badge tone={STATUS_TONE[report.status] || "neutral"}>{t("status." + report.status.toLowerCase())}</Badge>
+                  {report.member} · {formatDisplayDate(report.startDate)} – {formatDisplayDate(report.endDate)} <Badge tone={STATUS_TONE[report.status] || "neutral"}>{t("status." + report.status.toLowerCase())}</Badge>
                 </p>
               </div>
               <div className="flex gap-2 flex-wrap">

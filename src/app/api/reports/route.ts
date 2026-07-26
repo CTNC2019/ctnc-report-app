@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSession, getLiveSession, isManager } from "@/lib/auth";
 import { appendObjects, deleteRowsByKey, readObjects, updateObjectByKey } from "@/lib/sheets";
 import { stringifyPhotos, stringifyDocs, type PhotoItem, type DocLink } from "@/lib/reportData";
+import { validateDateRange } from "@/lib/dateRange";
 
 export const runtime = "nodejs";
 
@@ -28,7 +29,8 @@ export async function GET() {
       id: r.Report_ID,
       userId: r.User_ID,
       member: nameOf(r.User_ID),
-      month: r.Reporting_Month,
+      startDate: r.Start_Date,
+      endDate: r.End_Date,
       status: r.Status || "Draft",
       submittedAt: r.Submitted_At,
       totalActivities: siteUpdates
@@ -66,8 +68,11 @@ export async function POST(request: Request) {
   if (!me) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
   const body = await request.json();
-  const month: string = body.month;
-  if (!month) return NextResponse.json({ error: "missing month" }, { status: 400 });
+  const startDate: string = body.startDate;
+  const endDate: string = body.endDate;
+  if (!startDate || !endDate) return NextResponse.json({ error: "missing date range" }, { status: 400 });
+  const rangeError = validateDateRange(startDate, endDate);
+  if (rangeError) return NextResponse.json({ error: rangeError }, { status: 400 });
 
   // targetUserId is only used to decide the owner of a BRAND NEW report (Manager/Admin
   // creating one on someone else's behalf via an explicit body.userId). It must never be
@@ -79,13 +84,13 @@ export async function POST(request: Request) {
 
   // A brand-new report (no reportId from the client — that only happens when editing
   // an existing one via ?id=) must never collide with a report already on file for the
-  // same member + month. The old scheme derived the id purely from userId+month, so a
-  // second "Tạo báo cáo mới" for a month that already had a report silently overwrote
-  // it instead of creating an independent one. Give every genuinely-new report its own
-  // id: the plain "user-month" id if that slot is free, otherwise a numbered suffix.
+  // same member + reporting period. Give every genuinely-new report its own id: the
+  // plain "user-startdate" id if that slot is free, otherwise a numbered suffix. Basing
+  // the id on Start_Date (not the old fixed month) still gives a stable, human-scannable
+  // id even now that reporting periods are free-form date ranges.
   let reportId: string = body.reportId;
   if (!reportId) {
-    const base = `${targetUserId}-${month.replace("/", "")}`;
+    const base = `${targetUserId}-${startDate.replace(/-/g, "")}`;
     const sameSlot = existing.filter((r) => r.Report_ID === base || r.Report_ID.startsWith(base + "-"));
     reportId = sameSlot.length === 0 ? base : `${base}-${sameSlot.length + 1}`;
   }
@@ -106,7 +111,8 @@ export async function POST(request: Request) {
     // approving the report) hit Save. Preserve the original owner on every update; the
     // targetUserId computed above only applies when a genuinely new report is created.
     User_ID: current ? current.User_ID : targetUserId,
-    Reporting_Month: month,
+    Start_Date: startDate,
+    End_Date: endDate,
     Date_Prepared: current?.Date_Prepared || now,
     Submitted_At: status === "Submitted" ? now : current?.Submitted_At || "",
     Status: status,

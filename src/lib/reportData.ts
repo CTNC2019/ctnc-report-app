@@ -1,10 +1,15 @@
 import {
   readObjects,
-  nowMonth,
   siteName,
   labelOf,
   getMasterData,
 } from "@/lib/sheets";
+import {
+  parseISODate,
+  rangesOverlap,
+  currentMonthRange,
+  formatRangeShort,
+} from "@/lib/dateRange";
 
 export type PhotoItem = { url: string; caption: string };
 
@@ -53,11 +58,15 @@ export type MemberStatus = {
 
 export type SiteStat = { code: string; name: string; totalActs: number };
 export type TypeStat = { code: string; label: string; count: number };
-export type TrendPoint = { month: string; reportsSubmitted: number; totalActivities: number };
+// A "period" here is a distinct Start_Date/End_Date pair drawn from actual submitted
+// reports — the free-form Start/End Date model has no fixed monthly grid to snap trend
+// points to, so the trend chart shows the last 6 *reporting periods that were actually
+// used*, oldest first. `label` is a short, human-readable range (e.g. "01/07 – 31/07").
+export type TrendPoint = { startDate: string; endDate: string; label: string; reportsSubmitted: number; totalActivities: number };
 export type ProposalStat = { status: string; label: string; count: number };
 export type DonorStat = { donor: string; count: number };
 export type CommChannelStat = { code: string; label: string; count: number };
-export type CommTrendPoint = { month: string; channels: Record<string, number> };
+export type CommTrendPoint = { startDate: string; endDate: string; label: string; channels: Record<string, number> };
 
 export type IssueItem = {
   reportId: string;
@@ -98,8 +107,15 @@ export type ReportsDataItem = {
 };
 
 export type DashboardData = {
-  month: string;
-  availableMonths: string[];
+  // The reporting period actually used to compute everything below — either the
+  // caller's requested Start/End Date (if valid) or the current calendar month as a
+  // sensible default, mirroring the old "current month" default exactly.
+  startDate: string;
+  endDate: string;
+  // Distinct periods drawn from real report data, newest first — replaces the old
+  // fixed "availableMonths" list now that periods are free-form date ranges. Used to
+  // populate a "recent periods" quick-pick alongside the Start/End Date inputs.
+  availableRanges: { startDate: string; endDate: string; label: string }[];
   kpi: {
     reportsThisMonth: string;
     submittedCount: number;
@@ -126,21 +142,9 @@ export type DashboardData = {
   reportsData: ReportsDataItem[];
 };
 
-function sortMonthsDesc(months: string[]): string[] {
-  const parse = (m: string) => {
-    const [mm, yyyy] = m.split("/");
-    return Number(yyyy) * 100 + Number(mm);
-  };
-  return [...new Set(months)].sort((a, b) => parse(b) - parse(a));
-}
-
-function shiftMonth(month: string, delta: number): string {
-  const [mm, yyyy] = month.split("/").map(Number);
-  const d = new Date(yyyy, mm - 1 + delta, 1);
-  return String(d.getMonth() + 1).padStart(2, "0") + "/" + d.getFullYear();
-}
-
-/** Parse a dd/mm/yyyy or yyyy-mm-dd style date string into a comparable Date, best-effort. */
+/** Parse a dd/mm/yyyy or yyyy-mm-dd style date string into a comparable Date, best-effort.
+ * Used for free-text date fields entered by hand (deadlines, proposal due dates) —
+ * unrelated to the Start_Date/End_Date reporting-period fields, which are always ISO. */
 function parseDate(s: string): Date | null {
   if (!s) return null;
   const iso = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
@@ -151,7 +155,7 @@ function parseDate(s: string): Date | null {
   return isNaN(d.getTime()) ? null : d;
 }
 
-export async function getFullDashboardData(month?: string, lang: "vi" | "en" = "vi"): Promise<DashboardData> {
+export async function getFullDashboardData(startDateIn?: string, endDateIn?: string, lang: "vi" | "en" = "vi"): Promise<DashboardData> {
   const [
     users,
     reports,
@@ -181,25 +185,38 @@ export async function getFullDashboardData(month?: string, lang: "vi" | "en" = "
 
   const activeUsers = users.filter((u) => (u.Is_Active ?? "true").trim().toLowerCase() !== "false");
 
-  const monthsFromData = sortMonthsDesc(reports.map((r) => r.Reporting_Month).filter(Boolean));
-  const current = nowMonth();
-  const availableMonths = sortMonthsDesc([current, ...monthsFromData]);
-  const targetMonth = month && availableMonths.includes(month) ? month : current;
+  // --- Resolve the viewing period: caller's Start/End Date if valid, else current month ---
+  const defaultRange = currentMonthRange();
+  const validCustomRange = !!(startDateIn && endDateIn && parseISODate(startDateIn) && parseISODate(endDateIn) && startDateIn <= endDateIn);
+  const targetStart = validCustomRange ? (startDateIn as string) : defaultRange.startDate;
+  const targetEnd = validCustomRange ? (endDateIn as string) : defaultRange.endDate;
 
-  const monthReports = reports.filter((r) => r.Reporting_Month === targetMonth);
-  const reportIdsThisMonth = new Set(monthReports.map((r) => r.Report_ID));
+  // Distinct periods actually used across all reports, newest first — feeds the
+  // "recent periods" quick-pick on the Dashboard (replaces the old availableMonths list).
+  const periodPairs = new Map<string, { startDate: string; endDate: string }>();
+  reports.forEach((r) => {
+    if (r.Start_Date && r.End_Date) periodPairs.set(`${r.Start_Date}|${r.End_Date}`, { startDate: r.Start_Date, endDate: r.End_Date });
+  });
+  periodPairs.set(`${defaultRange.startDate}|${defaultRange.endDate}`, defaultRange);
+  const availableRanges = Array.from(periodPairs.values())
+    .sort((a, b) => b.startDate.localeCompare(a.startDate))
+    .map((p) => ({ ...p, label: formatRangeShort(p.startDate, p.endDate) }));
+
+  // A report is "in range" if its own reporting period overlaps at all with the
+  // viewing range — the direct generalization of the old exact "Reporting_Month ===
+  // targetMonth" check now that periods are free-form instead of fixed calendar months.
+  const rangeReports = reports.filter((r) => r.Start_Date && r.End_Date && rangesOverlap(r.Start_Date, r.End_Date, targetStart, targetEnd));
+  const reportIdsInRange = new Set(rangeReports.map((r) => r.Report_ID));
 
   const nameOf = (uid: string) => users.find((u) => u.User_ID === uid)?.Full_Name || uid;
 
   // --- Members table ---
-  // A member can now have more than one report for the same month (each "Tạo báo cáo
-  // mới" creates an independent report rather than silently overwriting an existing
-  // one) — pick the most recently touched one to represent that member's status here;
+  // A member can have more than one report whose period overlaps the viewing range —
+  // pick the most recently touched one to represent that member's status chip here;
   // the Reports list page and the export/aggregation totals below still include all of
-  // them, nothing is hidden or dropped, this only affects which single status chip
-  // shows on the Dashboard's member grid.
+  // them, nothing is hidden or dropped.
   const members: MemberStatus[] = activeUsers.map((u) => {
-    const userReports = monthReports
+    const userReports = rangeReports
       .filter((r) => r.User_ID === u.User_ID)
       .sort((a, b) => (b.Submitted_At || b.Date_Prepared || "").localeCompare(a.Submitted_At || a.Date_Prepared || ""));
     const rep = userReports[0];
@@ -221,17 +238,17 @@ export async function getFullDashboardData(month?: string, lang: "vi" | "en" = "
   const submittedCount = members.filter((m) => m.status !== "Missing" && m.status !== "Draft").length;
   const pendingApprovals = reports.filter((r) => r.Status === "Submitted").length;
 
-  const activitiesThisMonth = activities.filter((a) => reportIdsThisMonth.has(a.Report_ID));
-  const activitiesCompleted = activitiesThisMonth.length;
+  const activitiesInRange = activities.filter((a) => reportIdsInRange.has(a.Report_ID));
+  const activitiesCompleted = activitiesInRange.length;
 
   // --- Site chart (structured activities, falls back to Num_Acts if no structured rows yet) ---
   const siteMap = new Map<string, number>();
   SITES.forEach((s) => siteMap.set(s.code, 0));
-  if (activitiesThisMonth.length) {
-    activitiesThisMonth.forEach((a) => siteMap.set(a.Site_Code, (siteMap.get(a.Site_Code) || 0) + 1));
+  if (activitiesInRange.length) {
+    activitiesInRange.forEach((a) => siteMap.set(a.Site_Code, (siteMap.get(a.Site_Code) || 0) + 1));
   } else {
     siteUpdates
-      .filter((s) => reportIdsThisMonth.has(s.Report_ID))
+      .filter((s) => reportIdsInRange.has(s.Report_ID))
       .forEach((s) => siteMap.set(s.Site_Code, (siteMap.get(s.Site_Code) || 0) + (parseInt(s.Num_Acts, 10) || 0)));
   }
   const siteStats: SiteStat[] = SITES.map((s) => ({ code: s.code, name: s.enShort || s.en, totalActs: siteMap.get(s.code) || 0 }));
@@ -239,24 +256,36 @@ export async function getFullDashboardData(month?: string, lang: "vi" | "en" = "
   // --- Activity-type chart ---
   const typeMap = new Map<string, number>();
   ACTIVITY_TYPES.forEach((t) => typeMap.set(t.code, 0));
-  activitiesThisMonth.forEach((a) => typeMap.set(a.Activity_Type, (typeMap.get(a.Activity_Type) || 0) + 1));
+  activitiesInRange.forEach((a) => typeMap.set(a.Activity_Type, (typeMap.get(a.Activity_Type) || 0) + 1));
   const typeStats: TypeStat[] = ACTIVITY_TYPES.map((t) => ({ code: t.code, label: lang === "en" ? t.en : t.vi, count: typeMap.get(t.code) || 0 }));
 
-  // --- Trend: last 6 months ending at targetMonth ---
-  const trendMonths: string[] = [];
-  for (let i = 5; i >= 0; i--) trendMonths.push(shiftMonth(targetMonth, -i));
-  const trend: TrendPoint[] = trendMonths.map((m) => {
-    const repsInM = reports.filter((r) => r.Reporting_Month === m && r.Status && r.Status !== "Draft");
-    const idsInM = new Set(repsInM.map((r) => r.Report_ID));
-    const actsInM = activities.filter((a) => idsInM.has(a.Report_ID)).length;
-    const fallbackActs = actsInM || siteUpdates.filter((s) => idsInM.has(s.Report_ID)).reduce((sum, s) => sum + (parseInt(s.Num_Acts, 10) || 0), 0);
-    return { month: m, reportsSubmitted: repsInM.length, totalActivities: fallbackActs };
+  // --- Trend: last 6 reporting periods actually used (by Start_Date desc among
+  // submitted, i.e. non-Draft, reports), oldest first for left-to-right chart reading.
+  // Independent of the currently-viewed range — this always shows the most recent
+  // history regardless of which period the user is currently looking at.
+  const periodKey = (r: Record<string, string>) => `${r.Start_Date}|${r.End_Date}`;
+  const submittedReports = reports.filter((r) => r.Status && r.Status !== "Draft" && r.Start_Date && r.End_Date);
+  const recentPeriods = Array.from(new Set(submittedReports.map(periodKey)))
+    .map((k) => {
+      const [s, e] = k.split("|");
+      return { startDate: s, endDate: e };
+    })
+    .sort((a, b) => b.startDate.localeCompare(a.startDate))
+    .slice(0, 6)
+    .reverse();
+
+  const trend: TrendPoint[] = recentPeriods.map((p) => {
+    const repsInP = submittedReports.filter((r) => r.Start_Date === p.startDate && r.End_Date === p.endDate);
+    const idsInP = new Set(repsInP.map((r) => r.Report_ID));
+    const actsInP = activities.filter((a) => idsInP.has(a.Report_ID)).length;
+    const fallbackActs = actsInP || siteUpdates.filter((s) => idsInP.has(s.Report_ID)).reduce((sum, s) => sum + (parseInt(s.Num_Acts, 10) || 0), 0);
+    return { startDate: p.startDate, endDate: p.endDate, label: formatRangeShort(p.startDate, p.endDate), reportsSubmitted: repsInP.length, totalActivities: fallbackActs };
   });
 
-  // --- Proposals summary (this month) ---
-  const propsThisMonth = proposals.filter((p) => reportIdsThisMonth.has(p.Report_ID));
+  // --- Proposals summary (this period) ---
+  const propsInRange = proposals.filter((p) => reportIdsInRange.has(p.Report_ID));
   const propCounts = new Map<string, number>();
-  propsThisMonth.forEach((p) => {
+  propsInRange.forEach((p) => {
     const code = p.Status_Code || "Writing";
     propCounts.set(code, (propCounts.get(code) || 0) + 1);
   });
@@ -268,7 +297,7 @@ export async function getFullDashboardData(month?: string, lang: "vi" | "en" = "
   const activeProposals = (propCounts.get("Writing") || 0) + (propCounts.get("Needs review") || 0);
 
   const donorMap = new Map<string, number>();
-  propsThisMonth.forEach((p) => {
+  propsInRange.forEach((p) => {
     const donor = (p.Donor || "").trim();
     if (!donor) return;
     donorMap.set(donor, (donorMap.get(donor) || 0) + 1);
@@ -277,22 +306,21 @@ export async function getFullDashboardData(month?: string, lang: "vi" | "en" = "
     .map(([donor, count]) => ({ donor, count }))
     .sort((a, b) => b.count - a.count);
 
-  // --- Comms this month + 6-month trend ---
-  const commsThisMonth = commsRaw.filter((c) => reportIdsThisMonth.has(c.Report_ID));
-  const commsOutputs = commsThisMonth.reduce((sum, c) => sum + (parseInt(c.Num_Completed, 10) || 0), 0);
+  // --- Comms this period + trend across the same 6 recent periods as above ---
+  const commsInRange = commsRaw.filter((c) => reportIdsInRange.has(c.Report_ID));
+  const commsOutputs = commsInRange.reduce((sum, c) => sum + (parseInt(c.Num_Completed, 10) || 0), 0);
   const commChanMap = new Map<string, number>();
   COMM_CHANNELS.forEach((c) => commChanMap.set(c.code, 0));
-  commsThisMonth.forEach((c) => commChanMap.set(c.Channel_Code, (commChanMap.get(c.Channel_Code) || 0) + (parseInt(c.Num_Completed, 10) || 0)));
+  commsInRange.forEach((c) => commChanMap.set(c.Channel_Code, (commChanMap.get(c.Channel_Code) || 0) + (parseInt(c.Num_Completed, 10) || 0)));
   const commsChannels: CommChannelStat[] = COMM_CHANNELS.map((c) => ({ code: c.code, label: lang === "en" ? c.en : c.vi, count: commChanMap.get(c.code) || 0 }));
 
-  const commsTrend: CommTrendPoint[] = trendMonths.map((m) => {
-    const repsInM = reports.filter((r) => r.Reporting_Month === m && r.Status && r.Status !== "Draft");
-    const idsInM = new Set(repsInM.map((r) => r.Report_ID));
-    const rowsInM = commsRaw.filter((c) => idsInM.has(c.Report_ID));
+  const commsTrend: CommTrendPoint[] = recentPeriods.map((p) => {
+    const idsInP = new Set(submittedReports.filter((r) => r.Start_Date === p.startDate && r.End_Date === p.endDate).map((r) => r.Report_ID));
+    const rowsInP = commsRaw.filter((c) => idsInP.has(c.Report_ID));
     const channels: Record<string, number> = {};
     COMM_CHANNELS.forEach((c) => (channels[c.code] = 0));
-    rowsInM.forEach((c) => (channels[c.Channel_Code] = (channels[c.Channel_Code] || 0) + (parseInt(c.Num_Completed, 10) || 0)));
-    return { month: m, channels };
+    rowsInP.forEach((c) => (channels[c.Channel_Code] = (channels[c.Channel_Code] || 0) + (parseInt(c.Num_Completed, 10) || 0)));
+    return { startDate: p.startDate, endDate: p.endDate, label: formatRangeShort(p.startDate, p.endDate), channels };
   });
 
   // --- Issues: merges 2 sources per the revised template —
@@ -300,9 +328,9 @@ export async function getFullDashboardData(month?: string, lang: "vi" | "en" = "
   // (b) per-site "Difficulties, challenges" (1.3) entered under each site in the monthly form,
   //     with that site's "Follow-up" (1.4) carried along as the action-needed note.
   const projectIssues: IssueItem[] = challengesRaw
-    .filter((i) => reportIdsThisMonth.has(i.Report_ID))
+    .filter((i) => reportIdsInRange.has(i.Report_ID))
     .map((i) => {
-      const rep = monthReports.find((r) => r.Report_ID === i.Report_ID);
+      const rep = rangeReports.find((r) => r.Report_ID === i.Report_ID);
       return {
         reportId: i.Report_ID,
         member: rep ? nameOf(rep.User_ID) : "",
@@ -313,9 +341,9 @@ export async function getFullDashboardData(month?: string, lang: "vi" | "en" = "
       };
     });
   const siteIssues: IssueItem[] = siteUpdates
-    .filter((s) => reportIdsThisMonth.has(s.Report_ID) && (s.Difficulties_Challenges || "").trim())
+    .filter((s) => reportIdsInRange.has(s.Report_ID) && (s.Difficulties_Challenges || "").trim())
     .map((s) => {
-      const rep = monthReports.find((r) => r.Report_ID === s.Report_ID);
+      const rep = rangeReports.find((r) => r.Report_ID === s.Report_ID);
       return {
         reportId: s.Report_ID,
         member: rep ? nameOf(rep.User_ID) : "",
@@ -330,9 +358,9 @@ export async function getFullDashboardData(month?: string, lang: "vi" | "en" = "
 
   // --- Priorities (Data_Priorities) ---
   const priorities: PriorityItem[] = prioritiesRaw
-    .filter((p) => reportIdsThisMonth.has(p.Report_ID))
+    .filter((p) => reportIdsInRange.has(p.Report_ID))
     .map((p) => {
-      const rep = monthReports.find((r) => r.Report_ID === p.Report_ID);
+      const rep = rangeReports.find((r) => r.Report_ID === p.Report_ID);
       return {
         reportId: p.Report_ID,
         member: rep ? nameOf(rep.User_ID) : "",
@@ -346,7 +374,7 @@ export async function getFullDashboardData(month?: string, lang: "vi" | "en" = "
     .sort((a, b) => (parseInt(a.priorityNo, 10) || 99) - (parseInt(b.priorityNo, 10) || 99));
   const prioritiesSetThisMonth = priorities.length;
 
-  // --- Deadlines (Data_Deadlines) — upcoming across all reports, not just this month's ---
+  // --- Deadlines (Data_Deadlines) — upcoming across all reports, not just this period's ---
   const todayRef = parseDate(new Date().toISOString()) as Date;
   const deadlines: DeadlineItem[] = deadlinesRaw
     .map((d) => {
@@ -369,23 +397,24 @@ export async function getFullDashboardData(month?: string, lang: "vi" | "en" = "
 
   // --- Reports & data updates (Section 3) ---
   const reportsData: ReportsDataItem[] = reportsDataRaw
-    .filter((r) => reportIdsThisMonth.has(r.Report_ID))
+    .filter((r) => reportIdsInRange.has(r.Report_ID))
     .map((r) => {
-      const rep = monthReports.find((x) => x.Report_ID === r.Report_ID);
+      const rep = rangeReports.find((x) => x.Report_ID === r.Report_ID);
       return {
         reportId: r.Report_ID,
         member: rep ? nameOf(rep.User_ID) : "",
         itemName: r.Item_Name,
         typeCode: r.Type_Code,
-        typeLabel: labelOf(REPORT_TYPES, r.Type_Code, "vi"),
+        typeLabel: labelOf(REPORT_TYPES, r.Type_Code, lang),
         statusUpdate: r.Status_Update,
         deadlineAction: r.Deadline_Action,
       };
     });
 
   return {
-    month: targetMonth,
-    availableMonths,
+    startDate: targetStart,
+    endDate: targetEnd,
+    availableRanges,
     kpi: {
       reportsThisMonth: `${submittedCount}/${activeUsers.length}`,
       submittedCount,
@@ -439,7 +468,17 @@ export type RawDeadline = { reportId: string; member: string; date: string; even
 export type RawReportsData = { reportId: string; member: string; itemName: string; typeLabel: string; statusUpdate: string; deadlineAction: string };
 export type RawComm = { reportId: string; member: string; channelLabel: string; numCompleted: number; thisMonth: string; nextMonth: string };
 
-export async function getMonthRawRows(month: string): Promise<{
+/** Raw, per-report rows for the given reporting period — feeds the Word/PDF/Excel
+ * exporters. `lang` controls every translated label pulled from Master_Data (activity
+ * type, report type, comm channel, proposal status); site names are always the fixed
+ * short-English form regardless of lang, per the standing site-naming decision. A
+ * report is included if its own Start_Date/End_Date overlaps [startDate, endDate] at
+ * all — the same overlap rule used by the Dashboard. */
+export async function getRangeRawRows(
+  startDate: string,
+  endDate: string,
+  lang: "vi" | "en" = "vi"
+): Promise<{
   siteUpdates: RawSiteUpdate[];
   proposals: RawProposal[];
   issues: RawIssue[];
@@ -464,16 +503,16 @@ export async function getMonthRawRows(month: string): Promise<{
     ]);
   const { sites, activityTypes: ACTIVITY_TYPES, commChannels: COMM_CHANNELS, proposalStatuses: PROPOSAL_STATUSES, reportTypes: REPORT_TYPES } = masterData;
   const nameOf = (uid: string) => users.find((u) => u.User_ID === uid)?.Full_Name || uid;
-  const monthReports = reports.filter((r) => r.Reporting_Month === month);
-  const idToMember = new Map(monthReports.map((r) => [r.Report_ID, nameOf(r.User_ID)]));
-  const ids = new Set(monthReports.map((r) => r.Report_ID));
+  const rangeReports = reports.filter((r) => r.Start_Date && r.End_Date && rangesOverlap(r.Start_Date, r.End_Date, startDate, endDate));
+  const idToMember = new Map(rangeReports.map((r) => [r.Report_ID, nameOf(r.User_ID)]));
+  const ids = new Set(rangeReports.map((r) => r.Report_ID));
 
   const siteUpdates: RawSiteUpdate[] = siteUpdatesAll
     .filter((s) => ids.has(s.Report_ID))
     .map((s) => {
       const activitiesList: RawActivity[] = activitiesAll
         .filter((a) => a.Report_ID === s.Report_ID && a.Site_Code === s.Site_Code)
-        .map((a) => ({ activityType: a.Activity_Type, typeLabel: labelOf(ACTIVITY_TYPES, a.Activity_Type, "vi"), desc: a.Activity_Desc }));
+        .map((a) => ({ activityType: a.Activity_Type, typeLabel: labelOf(ACTIVITY_TYPES, a.Activity_Type, lang), desc: a.Activity_Desc }));
       return {
         reportId: s.Report_ID,
         member: idToMember.get(s.Report_ID) || "",
@@ -492,7 +531,7 @@ export async function getMonthRawRows(month: string): Promise<{
       };
     });
 
-  const proposals: RawProposal[] = proposalsAll
+  const proposalsOut: RawProposal[] = proposalsAll
     .filter((p) => ids.has(p.Report_ID))
     .map((p) => ({
       reportId: p.Report_ID,
@@ -500,7 +539,7 @@ export async function getMonthRawRows(month: string): Promise<{
       name: p.Proposal_Name,
       writer: nameOf(p.Writer_UserID) || p.Writer_UserID || "",
       donor: p.Donor || "",
-      statusLabel: labelOf(PROPOSAL_STATUSES, p.Status_Code, "vi"),
+      statusLabel: labelOf(PROPOSAL_STATUSES, p.Status_Code, lang),
       deadline: p.Deadline,
       note: p.Note || p.Short_Note,
     }));
@@ -546,7 +585,7 @@ export async function getMonthRawRows(month: string): Promise<{
       reportId: r.Report_ID,
       member: idToMember.get(r.Report_ID) || "",
       itemName: r.Item_Name,
-      typeLabel: labelOf(REPORT_TYPES, r.Type_Code, "vi"),
+      typeLabel: labelOf(REPORT_TYPES, r.Type_Code, lang),
       statusUpdate: r.Status_Update,
       deadlineAction: r.Deadline_Action,
     }));
@@ -556,13 +595,13 @@ export async function getMonthRawRows(month: string): Promise<{
     .map((c) => ({
       reportId: c.Report_ID,
       member: idToMember.get(c.Report_ID) || "",
-      channelLabel: labelOf(COMM_CHANNELS, c.Channel_Code, "vi"),
+      channelLabel: labelOf(COMM_CHANNELS, c.Channel_Code, lang),
       numCompleted: parseInt(c.Num_Completed, 10) || 0,
       thisMonth: c.This_Month,
       nextMonth: c.Next_Month,
     }));
 
-  return { siteUpdates, proposals, issues, priorities, deadlines, reportsData, comms };
+  return { siteUpdates, proposals: proposalsOut, issues, priorities, deadlines, reportsData, comms };
 }
 
 export { siteName };

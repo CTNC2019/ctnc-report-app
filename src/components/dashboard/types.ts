@@ -12,8 +12,9 @@ export type MemberStatus = {
 };
 
 export type DashboardData = {
-  month: string;
-  availableMonths: string[];
+  startDate: string;
+  endDate: string;
+  availableRanges: { startDate: string; endDate: string; label: string }[];
   kpi: {
     reportsThisMonth: string;
     pendingApprovals: number;
@@ -28,11 +29,11 @@ export type DashboardData = {
   members: MemberStatus[];
   siteStats: { code: string; name: string; totalActs: number }[];
   typeStats: { code: string; label: string; count: number }[];
-  trend: { month: string; reportsSubmitted: number; totalActivities: number }[];
+  trend: { startDate: string; endDate: string; label: string; reportsSubmitted: number; totalActivities: number }[];
   proposals: { status: string; label: string; count: number }[];
   proposalsByDonor: { donor: string; count: number }[];
   commsChannels: { code: string; label: string; count: number }[];
-  commsTrend: { month: string; channels: Record<string, number> }[];
+  commsTrend: { startDate: string; endDate: string; label: string; channels: Record<string, number> }[];
   issues: { reportId: string; member: string; siteCode: string; description: string; actionNeeded: string; pic: string }[];
   priorities: { reportId: string; member: string; priorityNo: string; siteCode: string; activity: string; pic: string; deadline: string }[];
   deadlines: { reportId: string; member: string; date: string; event: string; siteDonor: string; pic: string }[];
@@ -47,9 +48,17 @@ export const STATUS_STYLE: Record<string, string> = {
 };
 
 export const GREEN = "#1B5E20";
+// Kept for any remaining reference, but SiteActivityChart/ProposalsByDonorChart now use
+// CHART_PALETTE below instead, since GREENS alone (7 shades of the same hue) made
+// adjacent bars/slices hard to tell apart.
 export const GREENS = ["#1B5E20", "#2E7D32", "#388E3C", "#43A047", "#66BB6A", "#81C784", "#A5D6A7"];
 export const TYPE_COLORS = ["#1B5E20", "#388E3C", "#66BB6A", "#F9A825", "#0D47A1", "#5C6BC0", "#9E9E9E"];
 export const COMM_COLORS = ["#0D47A1", "#1B5E20", "#66BB6A", "#F9A825", "#9E9E9E"];
+// Multi-hue palette for charts with many same-family categories (8 sites, N donors) —
+// alternates CTNC greens with the existing accent tokens (blue/amber/danger/grey) so
+// every adjacent segment has clearly different hue, not just a slightly different
+// shade of green. All colors reused 1:1 from src/app/globals.css design tokens.
+export const CHART_PALETTE = ["#1B5E20", "#0D47A1", "#F9A825", "#66BB6A", "#C62828", "#5C6BC0", "#43A047", "#9E9E9E", "#2E7D32", "#81C784"];
 
 export function initials(name: string): string {
   return name.split(" ").filter(Boolean).slice(-2).map((p) => p[0]).join("").toUpperCase();

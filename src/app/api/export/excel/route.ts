@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import * as XLSX from "xlsx";
 import { getSession } from "@/lib/auth";
-import { getFullDashboardData, getMonthRawRows } from "@/lib/reportData";
+import { getFullDashboardData, getRangeRawRows } from "@/lib/reportData";
+import { formatDisplayDate } from "@/lib/dateRange";
 
 export const runtime = "nodejs";
 
@@ -18,15 +19,16 @@ export async function GET(request: Request) {
   if (!me) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
   const { searchParams } = new URL(request.url);
-  const month = searchParams.get("month") || undefined;
+  const startDate = searchParams.get("startDate") || undefined;
+  const endDate = searchParams.get("endDate") || undefined;
 
-  const data = await getFullDashboardData(month);
-  const raw = await getMonthRawRows(data.month);
+  const data = await getFullDashboardData(startDate, endDate);
+  const raw = await getRangeRawRows(data.startDate, data.endDate);
 
   const wb = XLSX.utils.book_new();
 
   const overviewSheet = XLSX.utils.aoa_to_sheet([
-    ["BÁO CÁO TỔNG HỢP CTNC — Tháng " + data.month],
+    [`BÁO CÁO TỔNG HỢP CTNC — Kỳ báo cáo: Từ ${formatDisplayDate(data.startDate)} đến ${formatDisplayDate(data.endDate)}`],
     ["Xuất lúc", new Date().toLocaleString("vi-VN")],
     [],
     ["Chỉ số", "Giá trị"],
@@ -164,7 +166,7 @@ export async function GET(request: Request) {
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(deadlineRows), "Deadline");
 
   const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
-  const filename = `CTNC_BaoCao_${data.month.replace("/", "-")}.xlsx`;
+  const filename = `CTNC_BaoCao_${data.startDate}_${data.endDate}.xlsx`;
 
   return new NextResponse(new Uint8Array(buf), {
     headers: {

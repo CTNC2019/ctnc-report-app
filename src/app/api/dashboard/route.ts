@@ -9,9 +9,10 @@ export async function GET(request: Request) {
   if (!me) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
   const { searchParams } = new URL(request.url);
-  const month = searchParams.get("month") || undefined;
+  const startDate = searchParams.get("startDate") || undefined;
+  const endDate = searchParams.get("endDate") || undefined;
   const lang = searchParams.get("lang") === "en" ? "en" : "vi";
 
-  const data = await getFullDashboardData(month, lang);
+  const data = await getFullDashboardData(startDate, endDate, lang);
   return NextResponse.json(data);
 }

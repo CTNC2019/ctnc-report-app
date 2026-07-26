@@ -132,7 +132,15 @@ export async function appendObjects(sheetName: string, objs: Row[]): Promise<voi
   await sheets.spreadsheets.values.append({
     spreadsheetId: SPREADSHEET_ID,
     range: `${sheetName}!A:${colLetter(headers.length)}`,
-    valueInputOption: "USER_ENTERED",
+    // RAW (not USER_ENTERED): Start_Date/End_Date are written as plain ISO
+    // "YYYY-MM-DD" strings. USER_ENTERED makes Sheets auto-parse text the same way
+    // typing it into the UI would — which silently converts an ISO date string into a
+    // real Sheets date serial, then reads back in whatever locale date format the
+    // column happens to have, no longer matching "YYYY-MM-DD" and breaking every
+    // parseISODate() call downstream. RAW stores every value exactly as sent, which is
+    // what every reader in this app (readObjects → plain strings, re-parsed on demand)
+    // already assumes.
+    valueInputOption: "RAW",
     requestBody: { values },
   });
 }
@@ -159,7 +167,8 @@ export async function updateObjectByKey(
   await sheets.spreadsheets.values.update({
     spreadsheetId: SPREADSHEET_ID,
     range: `${sheetName}!A${rowIdx + 1}:${colLetter(headers.length)}${rowIdx + 1}`,
-    valueInputOption: "USER_ENTERED",
+    // RAW — see the comment in appendObjects() above; same reasoning applies to updates.
+    valueInputOption: "RAW",
     requestBody: { values: [newRow] },
   });
   return true;
@@ -199,11 +208,6 @@ export async function deleteRowsByKey(sheetName: string, keyCol: string, keyVal:
     spreadsheetId: SPREADSHEET_ID,
     requestBody: { requests },
   });
-}
-
-export function nowMonth(): string {
-  const d = new Date();
-  return String(d.getMonth() + 1).padStart(2, "0") + "/" + d.getFullYear();
 }
 
 // Site names are always shown in their short English form (Label_EN_short in

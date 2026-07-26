@@ -2,58 +2,43 @@ import { NextResponse } from "next/server";
 import PDFDocument from "pdfkit";
 import path from "path";
 import { getSession } from "@/lib/auth";
-import { getFullDashboardData, getMonthRawRows, siteName } from "@/lib/reportData";
+import { getFullDashboardData, getRangeRawRows } from "@/lib/reportData";
 import { getMasterData } from "@/lib/sheets";
+import { buildReportTemplateData, REPORT_STYLE, type TableSpec } from "@/lib/reportTemplate";
 
 export const runtime = "nodejs";
 
-const ACCENT = "#0F9D58";
-const MUTED = "#666666";
+const { accentGreen, accentOrange, muted } = REPORT_STYLE.colors;
+const { orgName: FS_ORG, reportTitle: FS_TITLE, periodLine: FS_PERIOD, heading1: FS_H1, heading2: FS_H2, label: FS_LABEL, body: FS_BODY, table: FS_TABLE } =
+  REPORT_STYLE.fontSize;
 
-type Row = string[];
-
-function drawTable(doc: PDFKit.PDFDocument, x: number, startY: number, colWidths: number[], headers: Row, rows: Row[], bottomMargin: number): number {
+function drawTable(doc: PDFKit.PDFDocument, x: number, startY: number, colWidths: number[], table: TableSpec, bottomMargin: number): number {
   let y = startY;
   const rowHeight = 20;
   const pageBottom = doc.page.height - bottomMargin;
+  const tableWidth = colWidths.reduce((a, b) => a + b, 0);
 
-  function drawHeader() {
-    // Measure wrapped header height the same way data rows do below — a header label
-    // that doesn't fit a narrow column on one line (e.g. "SL hoàn thành", "Hạn chót")
-    // was previously clipped by a fixed-height band, spilling its second line into the
-    // first data row underneath it.
-    doc.font("Bold").fontSize(9);
-    const headerTexts = headers.map((h, i) => doc.heightOfString(h, { width: colWidths[i] - 8 }));
-    const hH = Math.max(rowHeight, Math.max(...headerTexts) + 8);
-    doc.fillColor("#FFFFFF");
-    doc.rect(x, y, colWidths.reduce((a, b) => a + b, 0), hH).fill(ACCENT);
-    let cx = x;
-    headers.forEach((h, i) => {
-      doc.fillColor("#FFFFFF").text(h, cx + 4, y + 6, { width: colWidths[i] - 8 });
-      cx += colWidths[i];
-    });
-    y += hH;
-  }
-
-  drawHeader();
-  doc.font("Regular").fontSize(9);
-  rows.forEach((r, idx) => {
-    const cellTexts = r.map((cell, i) => doc.heightOfString(cell || "-", { width: colWidths[i] - 8 }));
+  function drawRow(cells: string[], bold: boolean) {
+    doc.font(bold ? "Bold" : "Regular").fontSize(FS_TABLE);
+    const cellTexts = cells.map((c, i) => doc.heightOfString(c || "-", { width: colWidths[i] - 8 }));
     const h = Math.max(rowHeight, Math.max(...cellTexts) + 8);
     if (y + h > pageBottom) {
       doc.addPage();
       y = doc.page.margins.top;
-      drawHeader();
-      doc.font("Regular").fontSize(9);
     }
-    if (idx % 2 === 1) doc.rect(x, y, colWidths.reduce((a, b) => a + b, 0), h).fill("#F5F7FA");
+    // Full grid border, no fill — per the approved "no background color" table style.
     let cx = x;
-    r.forEach((cell, i) => {
-      doc.fillColor("#222222").text(cell || "-", cx + 4, y + 4, { width: colWidths[i] - 8 });
+    cells.forEach((c, i) => {
+      doc.rect(cx, y, colWidths[i], h).stroke("#000000");
+      doc.fillColor("#000000").text(c || "-", cx + 4, y + 4, { width: colWidths[i] - 8 });
       cx += colWidths[i];
     });
     y += h;
-  });
+  }
+
+  drawRow(table.headers, true);
+  table.rows.forEach((r) => drawRow(r, false));
+  void tableWidth;
   return y + 14;
 }
 
@@ -74,12 +59,14 @@ export async function GET(request: Request) {
   if (!me) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
   const { searchParams } = new URL(request.url);
-  const month = searchParams.get("month") || undefined;
+  const startDate = searchParams.get("startDate") || undefined;
+  const endDate = searchParams.get("endDate") || undefined;
+  const lang = searchParams.get("lang") === "en" ? "en" : "vi";
 
-  const data = await getFullDashboardData(month);
-  const raw = await getMonthRawRows(data.month);
+  const data = await getFullDashboardData(startDate, endDate, lang);
+  const raw = await getRangeRawRows(data.startDate, data.endDate, lang);
   const { sites: SITES } = await getMasterData();
-  const bySite = new Map(raw.siteUpdates.map((s) => [s.siteCode, s]));
+  const tpl = buildReportTemplateData({ lang, startDate: data.startDate, endDate: data.endDate, preparedByName: me.name, sites: SITES, raw });
 
   const fontDir = path.join(process.cwd(), "public", "fonts");
   // font: null prevents PDFKit from eagerly loading its bundled Helvetica.afm at
@@ -92,8 +79,12 @@ export async function GET(request: Request) {
     bufferPages: true,
     font: null as unknown as string,
   });
-  doc.registerFont("Regular", path.join(fontDir, "DejaVuSans.ttf"));
-  doc.registerFont("Bold", path.join(fontDir, "DejaVuSans-Bold.ttf"));
+  // Liberation Sans — metric-compatible, freely-licensed substitute for Arial (the
+  // requested font). Arial itself is a commercial Monotype font that cannot be
+  // redistributed as a font file in an open source-controlled repo; Liberation Sans
+  // renders visually near-identical and has full Vietnamese diacritic coverage.
+  doc.registerFont("Regular", path.join(fontDir, "LiberationSans-Regular.ttf"));
+  doc.registerFont("Bold", path.join(fontDir, "LiberationSans-Bold.ttf"));
 
   const chunks: Buffer[] = [];
   doc.on("data", (c: Buffer) => chunks.push(c));
@@ -107,155 +98,143 @@ export async function GET(request: Request) {
     if (doc.y + need > doc.page.height - bottomMargin) doc.addPage();
   }
 
-  doc.font("Bold").fontSize(11).fillColor(ACCENT).text("TRUNG TÂM CTNC", { align: "center" });
-  doc.font("Bold").fontSize(18).fillColor("#111111").text("CTNC MONTHLY REPORT", { align: "center" });
-  doc.font("Regular").fontSize(9).fillColor(MUTED).text(`Tháng báo cáo: ${data.month} · Xuất ngày ${new Date().toLocaleDateString("vi-VN")}`, { align: "center" });
+  // ---- Header: org name (green) / report title (orange) / dynamic reporting period ----
+  doc.font("Bold").fontSize(FS_ORG).fillColor(accentGreen).text(tpl.headerOrgName, { align: "center" });
+  doc.font("Bold").fontSize(FS_TITLE).fillColor(accentOrange).text(tpl.headerReportTitle, { align: "center" });
+  doc
+    .font("Bold")
+    .fontSize(FS_PERIOD)
+    .fillColor("#000000")
+    .text(`${tpl.headerPeriodLabel}: ${tpl.headerPeriodText}`, { align: "center" });
+  doc.font("Regular").fontSize(9).fillColor(muted).text(`${tpl.preparedByLabel}: ${tpl.preparedByValue} · ${tpl.exportedOnLabel}: ${tpl.exportedOnValue}`, { align: "center" });
   doc.moveDown(1);
 
   function h1(text: string) {
     ensureSpace(40);
-    doc.font("Bold").fontSize(14).fillColor(ACCENT).text(text, left, doc.y + 10);
+    doc.font("Bold").fontSize(FS_H1).fillColor(accentGreen).text(text, left, doc.y + 10);
     doc.moveDown(0.3);
   }
   function h2(text: string) {
     ensureSpace(24);
-    doc.font("Bold").fontSize(11).fillColor("#111111").text(text, left, doc.y + 6);
+    doc.font("Bold").fontSize(FS_H2).fillColor("#111111").text(text, left, doc.y + 6);
   }
   function label(text: string) {
     ensureSpace(16);
-    doc.font("Bold").fontSize(9).fillColor("#555555").text(text, left, doc.y + 4);
+    doc.font("Bold").fontSize(FS_LABEL).fillColor("#555555").text(text, left, doc.y + 4);
   }
   function bodyText(text: string) {
-    doc.font("Regular").fontSize(10).fillColor("#222222").text(text || "—", left, doc.y + 2, { width: usableWidth });
+    doc.font("Regular").fontSize(FS_BODY).fillColor("#000000").text(text || "—", left, doc.y + 2, { width: usableWidth });
   }
   function italicText(text: string) {
-    doc.font("Regular").fontSize(9).fillColor(MUTED).text(text, left, doc.y + 2, { width: usableWidth });
+    doc.font("Regular").fontSize(9).fillColor(muted).text(text, left, doc.y + 2, { width: usableWidth });
   }
 
-  h1("I. Tổng quan hoạt động theo khu vực / Monthly overview by site");
-  for (let i = 0; i < SITES.length; i++) {
-    const s = SITES[i];
-    const up = bySite.get(s.code);
-    h2(`${i + 1}. ${siteName(SITES, s.code)} (${up?.numActs || 0} hoạt động / activities)`);
+  h1(tpl.sectionITitle);
+  for (const s of tpl.siteEntries) {
+    h2(s.heading);
 
-    label(`${i + 1}.1. Hoạt động chính / Key activities`);
-    if (up?.keyActivities) bodyText(up.keyActivities);
-    if (up?.activitiesList.length) {
-      up.activitiesList.forEach((a) => bodyText(`• ${a.typeLabel}${a.desc ? " — " + a.desc : ""}`));
-    } else if (!up?.keyActivities) {
-      bodyText(up?.desc || "—");
-    }
+    label(s.keyActivitiesLabel);
+    if (s.keyActivitiesText) bodyText(s.keyActivitiesText);
+    s.activityBullets.forEach((a) => bodyText(`• ${a}`));
 
-    label(`${i + 1}.2. Kết quả / Key results`);
-    bodyText(up?.keyResults || "—");
+    label(s.keyResultsLabel);
+    bodyText(s.keyResultsText);
 
-    label(`${i + 1}.3. Khó khăn, thách thức / Difficulties, challenges`);
-    bodyText(up?.difficulties || "—");
+    label(s.difficultiesLabel);
+    bodyText(s.difficultiesText);
 
-    label(`${i + 1}.4. Việc cần theo dõi / Follow-up`);
-    bodyText(up?.followUp || "—");
+    label(s.followUpLabel);
+    bodyText(s.followUpText);
 
-    label(`${i + 1}.5. Hình ảnh hoạt động / Activity images`);
-    if (up?.photos.length) {
+    label(s.photosLabel);
+    if (s.photos.length) {
       const IMG_BOX_H = 140;
-      for (const p of up.photos) {
+      for (const p of s.photos) {
         const buf = await fetchImageBuffer(p.url);
         if (buf) {
           ensureSpace(IMG_BOX_H + 30);
           try {
             const imgY = doc.y + 4;
             doc.image(buf, left, imgY, { fit: [220, IMG_BOX_H] });
-            // doc.image() draws at an absolute position and does NOT advance doc.y on
-            // its own — the previous code used moveDown(8), which moves by 8 text
-            // *lines* rather than the image's actual height, so whatever was drawn
-            // next (caption, then the following label/section) started while still
-            // inside the image's box and rendered on top of it. Advance by the fixed
-            // box height itself instead — deterministic and always ≥ the image's
-            // actual rendered height, since `fit` never exceeds it.
+            // doc.image() draws at an absolute position and does not advance doc.y —
+            // advance by the fixed box height (always ≥ the image's rendered height,
+            // since `fit` never exceeds it) so the caption/next block never overlaps it.
             doc.y = imgY + IMG_BOX_H + 8;
             if (p.caption) italicText(p.caption);
           } catch {
-            italicText(`${p.caption || "Ảnh"}: ${p.url}`);
+            italicText(`${p.caption || "Photo"}: ${p.url}`);
           }
         } else {
-          italicText(`${p.caption || "Ảnh"}: ${p.url}`);
+          italicText(`${p.caption || "Photo"}: ${p.url}`);
         }
       }
     } else {
-      italicText("Không có ảnh đính kèm.");
+      italicText(s.noPhotosText);
     }
 
-    label(`${i + 1}.6. Tài liệu liên quan / Related documents`);
-    if (up?.relatedDocs.length) {
-      up.relatedDocs.forEach((d) => bodyText(`• ${d.label || d.url}${d.label ? " — " + d.url : ""}`));
+    label(s.relatedDocsLabel);
+    if (s.relatedDocs.length) {
+      s.relatedDocs.forEach((d) => bodyText(`• ${d.label || d.url}${d.label ? " — " + d.url : ""}`));
     } else {
-      italicText("Không có tài liệu liên quan.");
+      italicText(s.noDocsText);
     }
 
-    label(`${i + 1}.7. Kế hoạch tháng tới / Plan for next month`);
-    bodyText(up?.plan || "—");
+    label(s.planLabel);
+    bodyText(s.planText);
     doc.moveDown(0.6);
   }
 
-  h1("II. Đề xuất dự án / Project Proposal");
+  h1(tpl.sectionIITitle);
   doc.y = drawTable(
     doc, left, doc.y,
     [usableWidth * 0.24, usableWidth * 0.16, usableWidth * 0.16, usableWidth * 0.14, usableWidth * 0.1, usableWidth * 0.2],
-    ["Tên đề xuất", "Người viết", "Nhà tài trợ", "Trạng thái", "Hạn chót", "Ghi chú"],
-    raw.proposals.length
-      ? raw.proposals.map((p) => [p.name, p.writer, p.donor, p.statusLabel, p.deadline, p.note])
-      : [["Không có đề xuất trong tháng", "-", "-", "-", "-", "-"]],
+    tpl.proposalsTable.rows.length ? tpl.proposalsTable : { headers: tpl.proposalsTable.headers, rows: [[tpl.proposalsEmpty, "-", "-", "-", "-", "-"]] },
     bottomMargin
   );
 
-  h1("III. Báo cáo & cập nhật dữ liệu / Reports and data updates");
+  h1(tpl.sectionIIITitle);
   doc.y = drawTable(
     doc, left, doc.y,
     [usableWidth * 0.3, usableWidth * 0.15, usableWidth * 0.3, usableWidth * 0.25],
-    ["Báo cáo / bộ dữ liệu", "Loại", "Tiến độ", "Hạn chót & hành động"],
-    raw.reportsData.length ? raw.reportsData.map((r) => [r.itemName, r.typeLabel, r.statusUpdate, r.deadlineAction]) : [["Không có mục nào trong tháng", "-", "-", "-"]],
+    tpl.reportsDataTable.rows.length ? tpl.reportsDataTable : { headers: tpl.reportsDataTable.headers, rows: [[tpl.reportsDataEmpty, "-", "-", "-"]] },
     bottomMargin
   );
 
-  h1("IV. Truyền thông / Communications");
+  h1(tpl.sectionIVTitle);
   doc.y = drawTable(
     doc, left, doc.y,
     [usableWidth * 0.25, usableWidth * 0.15, usableWidth * 0.3, usableWidth * 0.3],
-    ["Kênh", "SL hoàn thành", "Diễn ra trong tháng", "Kế hoạch tháng tới"],
-    raw.comms.length ? raw.comms.map((c) => [c.channelLabel, String(c.numCompleted), c.thisMonth, c.nextMonth]) : [["—", "0", "—", "—"]],
+    tpl.commsTable,
     bottomMargin
   );
 
-  h1("V. Vấn đề cần hỗ trợ / Key challenges or support needed");
+  h1(tpl.sectionVTitle);
   doc.y = drawTable(
     doc, left, doc.y,
     [usableWidth * 0.3, usableWidth * 0.15, usableWidth * 0.35, usableWidth * 0.2],
-    ["Vấn đề", "Khu vực", "Hành động cần thiết", "Phụ trách"],
-    raw.issues.length ? raw.issues.map((i) => [i.description, i.siteCode, i.actionNeeded, i.pic]) : [["Không có vấn đề nào được ghi nhận", "-", "-", "-"]],
+    tpl.issuesTable.rows.length ? tpl.issuesTable : { headers: tpl.issuesTable.headers, rows: [[tpl.issuesEmpty, "-", "-", "-"]] },
     bottomMargin
   );
 
-  h1("VI. Ưu tiên chính tháng tới / Main priorities for next month");
+  h1(tpl.sectionVITitle);
   doc.y = drawTable(
     doc, left, doc.y,
     [usableWidth * 0.1, usableWidth * 0.2, usableWidth * 0.35, usableWidth * 0.2, usableWidth * 0.15],
-    ["Ưu tiên", "Khu vực", "Hoạt động dự kiến", "Phụ trách", "Hạn chót"],
-    raw.priorities.length ? raw.priorities.map((p) => [p.priorityNo, p.siteCode, p.activity, p.pic, p.deadline]) : [["-", "-", "Chưa xác định ưu tiên", "-", "-"]],
+    tpl.prioritiesTable.rows.length ? tpl.prioritiesTable : { headers: tpl.prioritiesTable.headers, rows: [["-", "-", tpl.prioritiesEmpty, "-", "-"]] },
     bottomMargin
   );
 
-  h1("VII. Deadline quan trọng tháng tới / Important deadlines next month");
+  h1(tpl.sectionVIITitle);
   doc.y = drawTable(
     doc, left, doc.y,
     [usableWidth * 0.15, usableWidth * 0.4, usableWidth * 0.25, usableWidth * 0.2],
-    ["Ngày", "Deadline / sự kiện", "Khu vực / Donor", "Phụ trách"],
-    raw.deadlines.length ? raw.deadlines.map((d) => [d.date, d.event, d.siteDonor, d.pic]) : [["-", "Không có deadline nào được ghi nhận", "-", "-"]],
+    tpl.deadlinesTable.rows.length ? tpl.deadlinesTable : { headers: tpl.deadlinesTable.headers, rows: [["-", tpl.deadlinesEmpty, "-", "-"]] },
     bottomMargin
   );
 
   doc.end();
   const buf = await done;
-  const filename = `CTNC_BaoCao_${data.month.replace("/", "-")}.pdf`;
+  const filename = `CTNC_BaoCao_${data.startDate}_${data.endDate}.pdf`;
 
   return new NextResponse(new Uint8Array(buf), {
     headers: { "Content-Type": "application/pdf", "Content-Disposition": `attachment; filename="${filename}"` },

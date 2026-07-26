@@ -4,58 +4,69 @@ import {
   Packer,
   Paragraph,
   TextRun,
-  HeadingLevel,
   Table,
   TableRow,
   TableCell,
   WidthType,
   AlignmentType,
   BorderStyle,
-  ShadingType,
   ImageRun,
 } from "docx";
 import { getSession } from "@/lib/auth";
-import { getFullDashboardData, getMonthRawRows, siteName } from "@/lib/reportData";
+import { getFullDashboardData, getRangeRawRows } from "@/lib/reportData";
 import { getMasterData } from "@/lib/sheets";
+import { buildReportTemplateData, REPORT_STYLE, type TableSpec } from "@/lib/reportTemplate";
 
 export const runtime = "nodejs";
 
-const ACCENT = "0F9D58"; // CTNC green
-
-const cellBorder = { style: BorderStyle.SINGLE, size: 2, color: "CCCCCC" };
+const FONT = REPORT_STYLE.fontFamily;
+const { accentGreen, accentOrange } = REPORT_STYLE.colors;
+const FS = REPORT_STYLE.fontSize;
+// docx sizes are in half-points (12pt body -> size 24).
+const SZ = {
+  orgName: FS.orgName * 2,
+  reportTitle: FS.reportTitle * 2,
+  periodLine: FS.periodLine * 2,
+  heading1: FS.heading1 * 2,
+  heading2: FS.heading2 * 2,
+  label: FS.label * 2,
+  body: FS.body * 2,
+  table: FS.table * 2,
+};
+// Full grid border, no shading — per the approved "no background color" table style.
+const cellBorder = { style: BorderStyle.SINGLE, size: 2, color: "000000" };
 const borders = { top: cellBorder, bottom: cellBorder, left: cellBorder, right: cellBorder };
 
 function headerCell(text: string) {
   return new TableCell({
     width: { size: 100, type: WidthType.PERCENTAGE },
-    shading: { type: ShadingType.CLEAR, color: "auto", fill: ACCENT },
     borders,
-    children: [new Paragraph({ children: [new TextRun({ text, bold: true, color: "FFFFFF", size: 19 })] })],
+    children: [new Paragraph({ children: [new TextRun({ text, bold: true, size: SZ.table, font: FONT })] })],
   });
 }
 function bodyCell(text: string) {
-  return new TableCell({ borders, children: [new Paragraph({ children: [new TextRun({ text: text || "-", size: 19 })] })] });
+  return new TableCell({ borders, children: [new Paragraph({ children: [new TextRun({ text: text || "-", size: SZ.table, font: FONT })] })] });
 }
-function dataTable(headers: string[], rows: string[][]) {
+function dataTable(t: TableSpec) {
   return new Table({
     width: { size: 100, type: WidthType.PERCENTAGE },
-    rows: [new TableRow({ tableHeader: true, children: headers.map(headerCell) }), ...rows.map((r) => new TableRow({ children: r.map(bodyCell) }))],
+    rows: [new TableRow({ tableHeader: true, children: t.headers.map(headerCell) }), ...t.rows.map((r) => new TableRow({ children: r.map(bodyCell) }))],
   });
 }
 function h1(text: string) {
-  return new Paragraph({ heading: HeadingLevel.HEADING_1, spacing: { before: 360, after: 150 }, children: [new TextRun({ text, bold: true, color: ACCENT })] });
+  return new Paragraph({ spacing: { before: 360, after: 150 }, children: [new TextRun({ text, bold: true, color: accentGreen.replace("#", ""), size: SZ.heading1, font: FONT })] });
 }
 function h2(text: string) {
-  return new Paragraph({ heading: HeadingLevel.HEADING_2, spacing: { before: 240, after: 100 }, children: [new TextRun({ text, bold: true })] });
+  return new Paragraph({ spacing: { before: 240, after: 100 }, children: [new TextRun({ text, bold: true, size: SZ.heading2, font: FONT })] });
 }
 function label(text: string) {
-  return new Paragraph({ spacing: { before: 120 }, children: [new TextRun({ text, bold: true, size: 19, color: "444444" })] });
+  return new Paragraph({ spacing: { before: 120 }, children: [new TextRun({ text, bold: true, size: SZ.label, color: "444444", font: FONT })] });
 }
 function body(text: string) {
-  return new Paragraph({ spacing: { after: 60 }, children: [new TextRun({ text: text || "—", size: 20 })] });
+  return new Paragraph({ spacing: { before: REPORT_STYLE.bodySpacingPt.before * 20, after: REPORT_STYLE.bodySpacingPt.after * 20 }, children: [new TextRun({ text: text || "—", size: SZ.body, font: FONT })] });
 }
 function italic(text: string) {
-  return new Paragraph({ children: [new TextRun({ text, italics: true, color: "888888", size: 19 })] });
+  return new Paragraph({ children: [new TextRun({ text, italics: true, color: "888888", size: SZ.label, font: FONT })] });
 }
 
 async function fetchImage(url: string): Promise<{ data: ArrayBuffer; type: "jpg" | "png" | "gif" | "bmp" } | null> {
@@ -81,40 +92,35 @@ export async function GET(request: Request) {
   if (!me) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
   const { searchParams } = new URL(request.url);
-  const month = searchParams.get("month") || undefined;
+  const startDate = searchParams.get("startDate") || undefined;
+  const endDate = searchParams.get("endDate") || undefined;
+  const lang = searchParams.get("lang") === "en" ? "en" : "vi";
 
-  const data = await getFullDashboardData(month);
-  const raw = await getMonthRawRows(data.month);
+  const data = await getFullDashboardData(startDate, endDate, lang);
+  const raw = await getRangeRawRows(data.startDate, data.endDate, lang);
   const { sites: SITES } = await getMasterData();
-
-  const bySite = new Map(raw.siteUpdates.map((s) => [s.siteCode, s]));
+  const tpl = buildReportTemplateData({ lang, startDate: data.startDate, endDate: data.endDate, preparedByName: me.name, sites: SITES, raw });
 
   const siteSections: Paragraph[] = [];
-  for (let i = 0; i < SITES.length; i++) {
-    const s = SITES[i];
-    const up = bySite.get(s.code);
-    siteSections.push(h2(`${i + 1}. ${siteName(SITES, s.code)} (${up?.numActs || 0} hoạt động / activities)`));
+  for (const s of tpl.siteEntries) {
+    siteSections.push(h2(s.heading));
 
-    siteSections.push(label(`${i + 1}.1. Hoạt động chính / Key activities`));
-    if (up?.keyActivities) siteSections.push(body(up.keyActivities));
-    if (up?.activitiesList.length) {
-      up.activitiesList.forEach((a) => siteSections.push(new Paragraph({ bullet: { level: 0 }, children: [new TextRun({ text: `${a.typeLabel}${a.desc ? " — " + a.desc : ""}`, size: 20 })] })));
-    } else if (!up?.keyActivities) {
-      siteSections.push(body(up?.desc || "—"));
-    }
+    siteSections.push(label(s.keyActivitiesLabel));
+    if (s.keyActivitiesText) siteSections.push(body(s.keyActivitiesText));
+    s.activityBullets.forEach((a) => siteSections.push(new Paragraph({ bullet: { level: 0 }, children: [new TextRun({ text: a, size: SZ.body, font: FONT })] })));
 
-    siteSections.push(label(`${i + 1}.2. Kết quả / Key results`));
-    siteSections.push(body(up?.keyResults || "—"));
+    siteSections.push(label(s.keyResultsLabel));
+    siteSections.push(body(s.keyResultsText));
 
-    siteSections.push(label(`${i + 1}.3. Khó khăn, thách thức / Difficulties, challenges`));
-    siteSections.push(body(up?.difficulties || "—"));
+    siteSections.push(label(s.difficultiesLabel));
+    siteSections.push(body(s.difficultiesText));
 
-    siteSections.push(label(`${i + 1}.4. Việc cần theo dõi / Follow-up`));
-    siteSections.push(body(up?.followUp || "—"));
+    siteSections.push(label(s.followUpLabel));
+    siteSections.push(body(s.followUpText));
 
-    siteSections.push(label(`${i + 1}.5. Hình ảnh hoạt động / Activity images`));
-    if (up?.photos.length) {
-      for (const p of up.photos) {
+    siteSections.push(label(s.photosLabel));
+    if (s.photos.length) {
+      for (const p of s.photos) {
         const img = await fetchImage(p.url);
         if (img) {
           siteSections.push(
@@ -124,100 +130,78 @@ export async function GET(request: Request) {
           );
           if (p.caption) siteSections.push(italic(p.caption));
         } else {
-          siteSections.push(italic(`${p.caption || "Ảnh"}: ${p.url}`));
+          siteSections.push(italic(`${p.caption || "Photo"}: ${p.url}`));
         }
       }
     } else {
-      siteSections.push(italic("Không có ảnh đính kèm."));
+      siteSections.push(italic(s.noPhotosText));
     }
 
-    siteSections.push(label(`${i + 1}.6. Tài liệu liên quan / Related documents`));
-    if (up?.relatedDocs.length) {
-      up.relatedDocs.forEach((d) =>
-        siteSections.push(new Paragraph({ bullet: { level: 0 }, children: [new TextRun({ text: `${d.label || d.url}${d.label ? " — " + d.url : ""}`, size: 20, color: "0563C1", underline: {} })] }))
+    siteSections.push(label(s.relatedDocsLabel));
+    if (s.relatedDocs.length) {
+      s.relatedDocs.forEach((d) =>
+        siteSections.push(new Paragraph({ bullet: { level: 0 }, children: [new TextRun({ text: `${d.label || d.url}${d.label ? " — " + d.url : ""}`, size: SZ.body, color: "0563C1", underline: {}, font: FONT })] }))
       );
     } else {
-      siteSections.push(italic("Không có tài liệu liên quan."));
+      siteSections.push(italic(s.noDocsText));
     }
 
-    siteSections.push(label(`${i + 1}.7. Kế hoạch tháng tới / Plan for next month`));
-    siteSections.push(body(up?.plan || "—"));
+    siteSections.push(label(s.planLabel));
+    siteSections.push(body(s.planText));
   }
 
   const doc = new Document({
+    styles: {
+      // Backstop default so any paragraph that forgets to set `font` explicitly still
+      // renders in the approved font rather than falling back to docx-js's own default
+      // (Calibri) — every helper above also sets `font` on each TextRun directly, since
+      // Word's built-in Heading styles can otherwise override a bare document default.
+      default: { document: { run: { font: FONT } } },
+    },
     sections: [
       {
         properties: {},
         children: [
-          new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: "TRUNG TÂM CTNC", bold: true, size: 22, color: ACCENT })] }),
-          new Paragraph({ alignment: AlignmentType.CENTER, heading: HeadingLevel.TITLE, children: [new TextRun({ text: "CTNC MONTHLY REPORT", bold: true })] }),
+          new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: tpl.headerOrgName, bold: true, size: SZ.orgName, color: accentGreen.replace("#", ""), font: FONT })] }),
+          new Paragraph({ alignment: AlignmentType.CENTER, spacing: { before: 60 }, children: [new TextRun({ text: tpl.headerReportTitle, bold: true, size: SZ.reportTitle, color: accentOrange.replace("#", ""), font: FONT })] }),
+          new Paragraph({
+            alignment: AlignmentType.CENTER,
+            spacing: { before: 120, after: 100 },
+            children: [new TextRun({ text: `${tpl.headerPeriodLabel}: ${tpl.headerPeriodText}`, bold: true, size: SZ.periodLine, font: FONT })],
+          }),
           new Paragraph({
             alignment: AlignmentType.CENTER,
             spacing: { after: 200 },
-            children: [new TextRun({ text: "Tổng quan hoạt động, ghi chú chính và ưu tiên tháng tới", italics: true, color: "666666", size: 19 })],
+            children: [new TextRun({ text: `${tpl.preparedByLabel}: ${tpl.preparedByValue} · ${tpl.exportedOnLabel}: ${tpl.exportedOnValue}`, italics: true, color: "666666", size: SZ.label, font: FONT })],
           }),
-          dataTable(
-            ["Tháng báo cáo", "Người chuẩn bị", "Ngày"],
-            [[data.month, data.members.find((m) => m.reportId)?.name || me.name || "-", new Date().toLocaleDateString("vi-VN")]]
-          ),
 
-          h1("I. Tổng quan hoạt động theo khu vực / Monthly overview by site"),
+          h1(tpl.sectionITitle),
           ...siteSections,
 
-          h1("II. Đề xuất dự án / Project Proposal"),
-          raw.proposals.length
-            ? dataTable(
-                ["Tên đề xuất", "Người viết", "Nhà tài trợ", "Trạng thái", "Hạn chót", "Ghi chú / hành động tiếp theo"],
-                raw.proposals.map((p) => [p.name, p.writer, p.donor, p.statusLabel, p.deadline, p.note])
-              )
-            : italic("Không có đề xuất trong tháng."),
+          h1(tpl.sectionIITitle),
+          tpl.proposalsTable.rows.length ? dataTable(tpl.proposalsTable) : italic(tpl.proposalsEmpty),
 
-          h1("III. Báo cáo & cập nhật dữ liệu / Reports and data updates"),
-          raw.reportsData.length
-            ? dataTable(
-                ["Báo cáo / bộ dữ liệu", "Loại", "Tiến độ / cập nhật", "Hạn chót & hành động"],
-                raw.reportsData.map((r) => [r.itemName, r.typeLabel, r.statusUpdate, r.deadlineAction])
-              )
-            : italic("Không có mục nào trong tháng."),
+          h1(tpl.sectionIIITitle),
+          tpl.reportsDataTable.rows.length ? dataTable(tpl.reportsDataTable) : italic(tpl.reportsDataEmpty),
 
-          h1("IV. Truyền thông / Communications"),
-          dataTable(
-            ["Kênh", "Số lượng hoàn thành", "Diễn ra trong tháng", "Kế hoạch tháng tới"],
-            raw.comms.length
-              ? raw.comms.map((c) => [c.channelLabel, String(c.numCompleted), c.thisMonth, c.nextMonth])
-              : [["—", "0", "—", "—"]]
-          ),
+          h1(tpl.sectionIVTitle),
+          dataTable(tpl.commsTable),
 
-          h1("V. Vấn đề cần hỗ trợ / Key challenges or support needed"),
-          raw.issues.length
-            ? dataTable(
-                ["Vấn đề", "Khu vực / hạng mục", "Hành động / hỗ trợ cần thiết", "Người phụ trách"],
-                raw.issues.map((i) => [i.description, i.siteCode, i.actionNeeded, i.pic])
-              )
-            : italic("Không có vấn đề nào được ghi nhận."),
+          h1(tpl.sectionVTitle),
+          tpl.issuesTable.rows.length ? dataTable(tpl.issuesTable) : italic(tpl.issuesEmpty),
 
-          h1("VI. Ưu tiên chính tháng tới / Main priorities for next month"),
-          raw.priorities.length
-            ? dataTable(
-                ["Ưu tiên", "Khu vực / hạng mục", "Hoạt động dự kiến", "Người phụ trách", "Hạn chót"],
-                raw.priorities.map((p) => [p.priorityNo, p.siteCode, p.activity, p.pic, p.deadline])
-              )
-            : italic("Chưa xác định ưu tiên cho tháng tới."),
+          h1(tpl.sectionVITitle),
+          tpl.prioritiesTable.rows.length ? dataTable(tpl.prioritiesTable) : italic(tpl.prioritiesEmpty),
 
-          h1("VII. Deadline quan trọng tháng tới / Important deadlines next month"),
-          raw.deadlines.length
-            ? dataTable(
-                ["Ngày", "Deadline / sự kiện", "Khu vực / Donor", "Người phụ trách"],
-                raw.deadlines.map((d) => [d.date, d.event, d.siteDonor, d.pic])
-              )
-            : italic("Không có deadline nào được ghi nhận."),
+          h1(tpl.sectionVIITitle),
+          tpl.deadlinesTable.rows.length ? dataTable(tpl.deadlinesTable) : italic(tpl.deadlinesEmpty),
         ],
       },
     ],
   });
 
   const buf = await Packer.toBuffer(doc);
-  const filename = `CTNC_BaoCao_${data.month.replace("/", "-")}.docx`;
+  const filename = `CTNC_BaoCao_${data.startDate}_${data.endDate}.docx`;
 
   return new NextResponse(new Uint8Array(buf), {
     headers: {
