@@ -39,16 +39,13 @@ export default function Nav() {
   }
 
   return (
-    <nav className="border-b border-white/10 bg-slate-900/50 backdrop-blur-xl sticky top-0 z-50">
+    <nav className="border-b border-border-subtle bg-white/85 backdrop-blur-xl sticky top-0 z-50">
       {/* Tier 1 — brand strip: logo + full center name, centered across the whole page */}
-      <div className="border-b border-white/5">
+      <div className="border-b border-border-subtle bg-primary-900/[0.03]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2.5 flex items-center justify-center gap-3">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/ctnc-logo.png" alt="CTNC" className="w-9 h-9 object-contain shrink-0" />
-          <span
-            className="font-bold tracking-wide text-sm sm:text-base text-center leading-tight"
-            style={{ color: "#4CAF50" }}
-          >
+          <span className="font-bold tracking-wide text-sm sm:text-base text-center leading-tight text-primary-800">
             CENTER FOR TECHNOLOGY AND NATURE CONSERVATION
           </span>
         </div>
@@ -59,7 +56,7 @@ export default function Nav() {
         <div className="flex items-center justify-between h-16">
           <div className="flex items-center gap-8">
             <Link href="/dashboard" className="flex items-center gap-2">
-              <span className="font-bold text-xl text-white tracking-tight">REPORTING DASHBOARD</span>
+              <span className="font-bold text-xl text-ink tracking-tight">REPORTING DASHBOARD</span>
             </Link>
             <div className="hidden md:flex items-center gap-1">
               {links.map((l) => {
@@ -69,7 +66,7 @@ export default function Nav() {
                     key={l.href}
                     href={l.href}
                     className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                      active ? "bg-emerald-500/15 text-emerald-300" : "text-slate-400 hover:text-white hover:bg-white/5"
+                      active ? "bg-primary-50 text-primary-800" : "text-ink-secondary hover:text-ink hover:bg-canvas"
                     }`}
                   >
                     <l.icon className="w-4 h-4" />
@@ -85,35 +82,35 @@ export default function Nav() {
               <div className="relative" ref={menuRef}>
                 <button
                   onClick={() => setMenuOpen((o) => !o)}
-                  className="flex items-center gap-2 group"
+                  className="flex items-center gap-2 group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 rounded-lg"
                 >
                   {user.avatarUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={user.avatarUrl} alt={user.name} className="w-8 h-8 rounded-full object-cover border border-white/10 group-hover:border-emerald-500/50" />
+                    <img src={user.avatarUrl} alt={user.name} className="w-8 h-8 rounded-full object-cover border border-border-subtle group-hover:border-primary-400" />
                   ) : (
-                    <UserCircle className="w-8 h-8 text-slate-500 group-hover:text-emerald-400" />
+                    <UserCircle className="w-8 h-8 text-ink-muted group-hover:text-primary-600" />
                   )}
-                  <span className="text-sm text-slate-400 hidden sm:inline">
-                    {t("dash.greeting")} <b className="text-white group-hover:text-emerald-300">{user.name}</b>{" "}
-                    <span className="text-xs px-2 py-0.5 rounded-md bg-slate-800 border border-slate-700 text-slate-400">
+                  <span className="text-sm text-ink-secondary hidden sm:inline">
+                    {t("dash.greeting")} <b className="text-ink group-hover:text-primary-700">{user.name}</b>{" "}
+                    <span className="text-xs px-2 py-0.5 rounded-md bg-slate-100 border border-border-subtle text-ink-secondary">
                       {t("role." + user.role) !== "role." + user.role ? t("role." + user.role) : user.role}
                     </span>
                   </span>
-                  <ChevronDown className={`w-4 h-4 text-slate-500 transition-transform ${menuOpen ? "rotate-180" : ""}`} />
+                  <ChevronDown className={`w-4 h-4 text-ink-muted transition-transform ${menuOpen ? "rotate-180" : ""}`} />
                 </button>
 
                 {menuOpen && (
-                  <div className="absolute right-0 top-full mt-2 w-48 rounded-xl border border-slate-700 bg-slate-800 shadow-xl overflow-hidden z-50">
+                  <div className="absolute right-0 top-full mt-2 w-48 rounded-xl border border-border-subtle bg-surface shadow-lg overflow-hidden z-50">
                     <Link
                       href="/profile"
                       onClick={() => setMenuOpen(false)}
-                      className="flex items-center gap-2 px-4 py-2.5 text-sm text-slate-300 hover:bg-white/5 hover:text-white transition-colors"
+                      className="flex items-center gap-2 px-4 py-2.5 text-sm text-ink-secondary hover:bg-canvas hover:text-ink transition-colors"
                     >
                       <UserCircle className="w-4 h-4" /> {t("nav.profile")}
                     </Link>
                     <button
                       onClick={logout}
-                      className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-red-300 hover:bg-red-500/10 hover:text-red-400 transition-colors border-t border-slate-700"
+                      className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-danger hover:bg-danger-soft transition-colors border-t border-border-subtle"
                     >
                       <LogOut className="w-4 h-4" /> {t("dash.logout")}
                     </button>

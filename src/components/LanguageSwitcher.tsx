@@ -34,14 +34,14 @@ export default function LanguageSwitcher() {
   const { lang, setLang } = useLanguage();
 
   return (
-    <div className="flex items-center gap-1 bg-white/10 rounded-full p-1 border border-white/10 backdrop-blur-md">
+    <div className="flex items-center gap-1 bg-slate-100 rounded-full p-1 border border-border-subtle">
       <motion.button
         whileTap={{ scale: 0.9 }}
         onClick={() => setLang("vi")}
         title="Tiếng Việt"
         aria-label="Tiếng Việt"
         className={`flex items-center justify-center w-8 h-8 rounded-full transition-all duration-200 overflow-hidden ${
-          lang === "vi" ? "ring-2 ring-white shadow-md" : "opacity-50 hover:opacity-90"
+          lang === "vi" ? "ring-2 ring-primary-600 shadow-sm" : "opacity-50 hover:opacity-90"
         }`}
       >
         <VNFlag className="w-full h-full object-cover" />
@@ -53,7 +53,7 @@ export default function LanguageSwitcher() {
         title="English"
         aria-label="English"
         className={`flex items-center justify-center w-8 h-8 rounded-full transition-all duration-200 overflow-hidden ${
-          lang === "en" ? "ring-2 ring-white shadow-md" : "opacity-50 hover:opacity-90"
+          lang === "en" ? "ring-2 ring-primary-600 shadow-sm" : "opacity-50 hover:opacity-90"
         }`}
       >
         <GBFlag className="w-full h-full object-cover" />

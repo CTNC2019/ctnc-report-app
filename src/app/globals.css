@@ -1,26 +1,46 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+/*
+ * Design tokens — grounded in the CTNC brand green already used throughout the app
+ * (see the GREENS palette that lived inline in dashboard/page.tsx before this refactor)
+ * plus the slate neutral scale the rest of the app already relies on. Centralizing them
+ * here means every page can reference `bg-primary-600`, `text-ink-secondary`, etc.
+ * instead of repeating hex literals in `style={{}}`.
+ */
+@theme {
+  --color-primary-50: #E8F5E9;
+  --color-primary-100: #C8E6C9;
+  --color-primary-200: #A5D6A7;
+  --color-primary-300: #81C784;
+  --color-primary-400: #66BB6A;
+  --color-primary-500: #4CAF50;
+  --color-primary-600: #43A047;
+  --color-primary-700: #388E3C;
+  --color-primary-800: #2E7D32;
+  --color-primary-900: #1B5E20;
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+  --color-accent-blue: #0D47A1;
+  --color-accent-amber: #F9A825;
+  --color-accent-indigo: #5C6BC0;
+  --color-danger: #C62828;
+  --color-danger-soft: #FEE2E2;
+  --color-warning-soft: #FEF3C7;
+  --color-success-soft: #DCFCE7;
+  --color-info-soft: #DBEAFE;
+
+  --color-surface: #FFFFFF;
+  --color-canvas: #F8FAFC;
+  --color-ink: #0F172A;
+  --color-ink-secondary: #64748B;
+  --color-ink-muted: #94A3B8;
+  --color-border-subtle: #E2E8F0;
+
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
 }

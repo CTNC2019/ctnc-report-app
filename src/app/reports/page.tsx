@@ -6,6 +6,7 @@ import { Plus, FileText, Trash2 } from "lucide-react";
 import Nav from "@/components/Nav";
 import { useLanguage } from "@/context/LanguageContext";
 import { useSession } from "@/hooks/useSession";
+import { Button, Badge, Card, PageHeader, EmptyState, Skeleton } from "@/components/ui";
 
 type ReportRow = {
   id: string;
@@ -16,11 +17,11 @@ type ReportRow = {
   totalActivities: number;
 };
 
-const STATUS_STYLE: Record<string, string> = {
-  Draft: "bg-slate-500/15 text-slate-300",
-  Submitted: "bg-blue-500/15 text-blue-300",
-  Approved: "bg-emerald-500/15 text-emerald-300",
-  Returned: "bg-amber-500/15 text-amber-300",
+const STATUS_TONE: Record<string, "neutral" | "info" | "success" | "warning"> = {
+  Draft: "neutral",
+  Submitted: "info",
+  Approved: "success",
+  Returned: "warning",
 };
 
 export default function ReportsList() {
@@ -66,80 +67,82 @@ export default function ReportsList() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-900 text-slate-200">
+    <div className="min-h-screen bg-canvas">
       <Nav />
       <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="flex justify-between items-end mb-8 flex-wrap gap-4">
-          <div>
-            <h1 className="text-3xl font-bold text-white mb-2 flex items-center gap-3">
-              <FileText className="w-7 h-7 text-emerald-400" /> {t("reports.title")}
-            </h1>
-            <p className="text-slate-400">{t("reports.subtitle")}</p>
-          </div>
-          <Link href="/form">
-            <button className="flex items-center gap-2 bg-emerald-500 hover:bg-emerald-400 text-slate-900 px-5 py-2.5 rounded-xl font-semibold shadow-lg shadow-emerald-500/20 transition-all hover:scale-105 active:scale-95">
-              <Plus className="w-5 h-5" /> {t("dash.newReport")}
-            </button>
-          </Link>
-        </div>
+        <PageHeader
+          icon={FileText}
+          title={t("reports.title")}
+          subtitle={t("reports.subtitle")}
+          actions={
+            <Link href="/form">
+              <Button>
+                <Plus className="w-5 h-5" /> {t("dash.newReport")}
+              </Button>
+            </Link>
+          }
+        />
 
-        <div className="bg-white/5 border border-white/10 rounded-2xl overflow-hidden">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-slate-400 text-xs uppercase tracking-wide border-b border-white/10">
-                <th className="px-5 py-3">{t("reports.col.id")}</th>
-                <th className="px-5 py-3">{t("reports.col.member")}</th>
-                <th className="px-5 py-3">{t("reports.col.month")}</th>
-                <th className="px-5 py-3">{t("reports.col.acts")}</th>
-                <th className="px-5 py-3">{t("reports.col.status")}</th>
-                <th className="px-5 py-3">{t("reports.col.actions")}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows === null && (
-                <tr><td colSpan={6} className="px-5 py-6 text-slate-500">{t("common.loading")}</td></tr>
-              )}
-              {rows?.length === 0 && (
-                <tr><td colSpan={6} className="px-5 py-6 text-slate-500">{t("reports.empty")}</td></tr>
-              )}
-              {rows?.map((r) => (
-                <tr key={r.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
-                  <td className="px-5 py-3 font-mono text-emerald-300">{r.id}</td>
-                  <td className="px-5 py-3">{r.member}</td>
-                  <td className="px-5 py-3">{r.month}</td>
-                  <td className="px-5 py-3">{r.totalActivities}</td>
-                  <td className="px-5 py-3">
-                    <span className={`text-xs px-2 py-1 rounded-md font-medium ${STATUS_STYLE[r.status] || STATUS_STYLE.Draft}`}>
-                      {t("status." + r.status.toLowerCase())}
-                    </span>
-                  </td>
-                  <td className="px-5 py-3">
-                    <div className="flex gap-2">
-                      <Link href={`/reports/${r.id}`} className="text-xs px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700">
-                        {t("reports.view")}
-                      </Link>
-                      {canEdit(r) && (
-                        <Link href={`/form?id=${r.id}`} className="text-xs px-3 py-1.5 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 text-blue-300">
-                          {t("reports.edit")}
-                        </Link>
-                      )}
-                      {canDelete(r) && (
-                        <button
-                          onClick={() => deleteReport(r.id)}
-                          disabled={deletingId === r.id}
-                          title={t("reports.delete")}
-                          className="text-xs px-3 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-300 disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-1.5"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-                    </div>
-                  </td>
+        <Card padded={false} className="overflow-hidden">
+          {rows === null ? (
+            <div className="p-6 space-y-3">
+              {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-10" />)}
+            </div>
+          ) : rows.length === 0 ? (
+            <EmptyState icon={FileText} message={t("reports.empty")} />
+          ) : (
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-ink-secondary text-xs uppercase tracking-wide border-b border-border-subtle">
+                  <th className="px-5 py-3 font-medium">{t("reports.col.id")}</th>
+                  <th className="px-5 py-3 font-medium">{t("reports.col.member")}</th>
+                  <th className="px-5 py-3 font-medium">{t("reports.col.month")}</th>
+                  <th className="px-5 py-3 font-medium">{t("reports.col.acts")}</th>
+                  <th className="px-5 py-3 font-medium">{t("reports.col.status")}</th>
+                  <th className="px-5 py-3 font-medium">{t("reports.col.actions")}</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr key={r.id} className="border-b border-border-subtle last:border-0 hover:bg-canvas transition-colors">
+                    <td className="px-5 py-3 font-mono text-primary-700">{r.id}</td>
+                    <td className="px-5 py-3 text-ink">{r.member}</td>
+                    <td className="px-5 py-3 text-ink-secondary">{r.month}</td>
+                    <td className="px-5 py-3 text-ink-secondary">{r.totalActivities}</td>
+                    <td className="px-5 py-3">
+                      <Badge tone={STATUS_TONE[r.status] || "neutral"}>{t("status." + r.status.toLowerCase())}</Badge>
+                    </td>
+                    <td className="px-5 py-3">
+                      <div className="flex gap-2">
+                        <Link href={`/reports/${r.id}`}>
+                          <Button variant="secondary" size="sm">{t("reports.view")}</Button>
+                        </Link>
+                        {canEdit(r) && (
+                          <Link href={`/form?id=${r.id}`}>
+                            <Button variant="secondary" size="sm" className="text-accent-blue border-blue-200 bg-info-soft hover:bg-blue-100">
+                              {t("reports.edit")}
+                            </Button>
+                          </Link>
+                        )}
+                        {canDelete(r) && (
+                          <Button
+                            variant="danger"
+                            size="sm"
+                            onClick={() => deleteReport(r.id)}
+                            disabled={deletingId === r.id}
+                            title={t("reports.delete")}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </Button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </Card>
       </main>
     </div>
   );
