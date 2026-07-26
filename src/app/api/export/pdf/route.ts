@@ -136,7 +136,7 @@ export async function GET(request: Request) {
   for (let i = 0; i < SITES.length; i++) {
     const s = SITES[i];
     const up = bySite.get(s.code);
-    h2(`${i + 1}. ${siteName(SITES, s.code, "vi")} (${up?.numActs || 0} hoạt động / activities)`);
+    h2(`${i + 1}. ${siteName(SITES, s.code)} (${up?.numActs || 0} hoạt động / activities)`);
 
     label(`${i + 1}.1. Hoạt động chính / Key activities`);
     if (up?.keyActivities) bodyText(up.keyActivities);

@@ -12,7 +12,7 @@ import { useSession } from "@/hooks/useSession";
 // /api/master-data (which reads the "Master_Data" Google Sheet tab) instead of being
 // hardcoded here. See MasterData state + the loading effect below. sheets.ts on the
 // server holds the built-in fallback wording used if that sheet tab isn't set up yet.
-type MasterItem = { code: string; vi: string; en: string };
+type MasterItem = { code: string; vi: string; en: string; enShort?: string };
 type MasterData = {
   sites: MasterItem[];
   activityTypes: MasterItem[];
@@ -77,6 +77,8 @@ function FormInner() {
   const { user } = useSession();
   const editId = useSearchParams().get("id");
   const L = (item: { vi: string; en: string }) => (lang === "en" ? item.en : item.vi);
+  // Site display name is ALWAYS the short English label, independent of the VI/EN toggle (locked-in decision).
+  const siteLabel = (item: { en: string; enShort?: string }) => item.enShort || item.en;
 
   const [currentStep, setCurrentStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -351,14 +353,14 @@ function FormInner() {
                         i === activeSite ? "bg-primary-600 text-white border-primary-600" : "bg-canvas text-ink-secondary border-border-subtle hover:border-primary-400"
                       }`}
                     >
-                      {s.code} · {sites[i].activities.length}
+                      {siteLabel(s)} · {sites[i].activities.length}
                     </button>
                   ))}
                 </div>
 
                 <div className={cardCls}>
                   <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-lg font-bold text-ink">{L(siteMeta)} ({siteMeta.code})</h3>
+                    <h3 className="text-lg font-bold text-ink">{siteLabel(siteMeta)} ({siteMeta.code})</h3>
                     <span className="text-xs text-primary-700 bg-primary-50 px-3 py-1 rounded-full">
                       {t("form.numActsAuto")}: {site.activities.length}
                     </span>
@@ -612,7 +614,7 @@ function FormInner() {
                       <Field label={t("form.site")}>
                         <select value={x.siteCode} onChange={(e) => setIssues((s) => s.map((y) => (y.key === x.key ? { ...y, siteCode: e.target.value } : y)))} className={inputCls}>
                           <option value="">—</option>
-                          {masterData.sites.map((s) => <option key={s.code} value={s.code}>{L(s)} ({s.code})</option>)}
+                          {masterData.sites.map((s) => <option key={s.code} value={s.code}>{siteLabel(s)} ({s.code})</option>)}
                         </select>
                       </Field>
                       <Field label={t("form.issuePic")}>
@@ -648,7 +650,7 @@ function FormInner() {
                       <Field label={t("form.site")}>
                         <select value={x.siteCode} onChange={(e) => setPriorities((s) => s.map((y) => (y.key === x.key ? { ...y, siteCode: e.target.value } : y)))} className={inputCls}>
                           <option value="">—</option>
-                          {masterData.sites.map((s) => <option key={s.code} value={s.code}>{L(s)} ({s.code})</option>)}
+                          {masterData.sites.map((s) => <option key={s.code} value={s.code}>{siteLabel(s)} ({s.code})</option>)}
                         </select>
                       </Field>
                       <Field label={t("form.issueDeadline")}>

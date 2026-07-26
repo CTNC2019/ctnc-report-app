@@ -151,7 +151,7 @@ function parseDate(s: string): Date | null {
   return isNaN(d.getTime()) ? null : d;
 }
 
-export async function getFullDashboardData(month?: string): Promise<DashboardData> {
+export async function getFullDashboardData(month?: string, lang: "vi" | "en" = "vi"): Promise<DashboardData> {
   const [
     users,
     reports,
@@ -234,13 +234,13 @@ export async function getFullDashboardData(month?: string): Promise<DashboardDat
       .filter((s) => reportIdsThisMonth.has(s.Report_ID))
       .forEach((s) => siteMap.set(s.Site_Code, (siteMap.get(s.Site_Code) || 0) + (parseInt(s.Num_Acts, 10) || 0)));
   }
-  const siteStats: SiteStat[] = SITES.map((s) => ({ code: s.code, name: s.vi, totalActs: siteMap.get(s.code) || 0 }));
+  const siteStats: SiteStat[] = SITES.map((s) => ({ code: s.code, name: s.enShort || s.en, totalActs: siteMap.get(s.code) || 0 }));
 
   // --- Activity-type chart ---
   const typeMap = new Map<string, number>();
   ACTIVITY_TYPES.forEach((t) => typeMap.set(t.code, 0));
   activitiesThisMonth.forEach((a) => typeMap.set(a.Activity_Type, (typeMap.get(a.Activity_Type) || 0) + 1));
-  const typeStats: TypeStat[] = ACTIVITY_TYPES.map((t) => ({ code: t.code, label: t.vi, count: typeMap.get(t.code) || 0 }));
+  const typeStats: TypeStat[] = ACTIVITY_TYPES.map((t) => ({ code: t.code, label: lang === "en" ? t.en : t.vi, count: typeMap.get(t.code) || 0 }));
 
   // --- Trend: last 6 months ending at targetMonth ---
   const trendMonths: string[] = [];
@@ -262,7 +262,7 @@ export async function getFullDashboardData(month?: string): Promise<DashboardDat
   });
   const proposalStats: ProposalStat[] = PROPOSAL_STATUSES.map((s) => ({
     status: s.code,
-    label: s.vi,
+    label: lang === "en" ? s.en : s.vi,
     count: propCounts.get(s.code) || 0,
   }));
   const activeProposals = (propCounts.get("Writing") || 0) + (propCounts.get("Needs review") || 0);
@@ -283,7 +283,7 @@ export async function getFullDashboardData(month?: string): Promise<DashboardDat
   const commChanMap = new Map<string, number>();
   COMM_CHANNELS.forEach((c) => commChanMap.set(c.code, 0));
   commsThisMonth.forEach((c) => commChanMap.set(c.Channel_Code, (commChanMap.get(c.Channel_Code) || 0) + (parseInt(c.Num_Completed, 10) || 0)));
-  const commsChannels: CommChannelStat[] = COMM_CHANNELS.map((c) => ({ code: c.code, label: c.vi, count: commChanMap.get(c.code) || 0 }));
+  const commsChannels: CommChannelStat[] = COMM_CHANNELS.map((c) => ({ code: c.code, label: lang === "en" ? c.en : c.vi, count: commChanMap.get(c.code) || 0 }));
 
   const commsTrend: CommTrendPoint[] = trendMonths.map((m) => {
     const repsInM = reports.filter((r) => r.Reporting_Month === m && r.Status && r.Status !== "Draft");
@@ -478,7 +478,7 @@ export async function getMonthRawRows(month: string): Promise<{
         reportId: s.Report_ID,
         member: idToMember.get(s.Report_ID) || "",
         siteCode: s.Site_Code,
-        siteName: siteName(sites, s.Site_Code, "vi"),
+        siteName: siteName(sites, s.Site_Code),
         numActs: activitiesList.length || parseInt(s.Num_Acts, 10) || 0,
         activitiesList,
         desc: s.Activities_Notes,

@@ -10,7 +10,8 @@ export async function GET(request: Request) {
 
   const { searchParams } = new URL(request.url);
   const month = searchParams.get("month") || undefined;
+  const lang = searchParams.get("lang") === "en" ? "en" : "vi";
 
-  const data = await getFullDashboardData(month);
+  const data = await getFullDashboardData(month, lang);
   return NextResponse.json(data);
 }

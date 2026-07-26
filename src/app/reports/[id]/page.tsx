@@ -13,6 +13,7 @@ import { Card, Button, Badge, EmptyState } from "@/components/ui";
 type Activity = { activityType: string; desc: string };
 type SiteEntry = {
   siteCode: string;
+  siteName: string;
   activities: Activity[];
   keyActivities: string;
   keyResults: string;
@@ -166,7 +167,7 @@ export default function ReportView({ params }: { params: Promise<{ id: string }>
                 {report.sites.map((s, i) => (
                   <ItemCard key={i}>
                     <div className="flex justify-between text-sm mb-2">
-                      <b className="text-ink">{s.siteCode}</b>
+                      <b className="text-ink">{s.siteName || s.siteCode}</b>
                       <span className="text-ink-secondary">{s.activities.length} hoạt động</span>
                     </div>
                     {s.activities.length > 0 && (

@@ -93,7 +93,7 @@ export async function GET(request: Request) {
   for (let i = 0; i < SITES.length; i++) {
     const s = SITES[i];
     const up = bySite.get(s.code);
-    siteSections.push(h2(`${i + 1}. ${siteName(SITES, s.code, "vi")} (${up?.numActs || 0} hoạt động / activities)`));
+    siteSections.push(h2(`${i + 1}. ${siteName(SITES, s.code)} (${up?.numActs || 0} hoạt động / activities)`));
 
     siteSections.push(label(`${i + 1}.1. Hoạt động chính / Key activities`));
     if (up?.keyActivities) siteSections.push(body(up.keyActivities));

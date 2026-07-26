@@ -24,21 +24,27 @@ import {
 // Data fetching, export triggering, and the API contract below are unchanged from
 // before this visual refactor — only the JSX composition moved into components/dashboard.
 export default function Dashboard() {
-  const { t } = useLanguage();
+  const { t, lang } = useLanguage();
   const [data, setData] = useState<DashboardData | null>(null);
   const [month, setMonth] = useState<string | null>(null);
   const [exporting, setExporting] = useState<string | null>(null);
 
+  // Re-fetch whenever the VI/EN language toggle changes too, not just the month —
+  // otherwise chart labels (activity type, comm channel, proposal status) stay stuck
+  // in whichever language the page first loaded in, since the server bakes the label
+  // text into the response instead of the client translating it.
   useEffect(() => {
-    const url = month ? `/api/dashboard?month=${encodeURIComponent(month)}` : "/api/dashboard";
-    fetch(url)
+    const params = new URLSearchParams();
+    if (month) params.set("month", month);
+    params.set("lang", lang);
+    fetch(`/api/dashboard?${params.toString()}`)
       .then((r) => r.json())
       .then((d: DashboardData) => {
         setData(d);
         if (!month) setMonth(d.month);
       })
       .catch(() => {});
-  }, [month]);
+  }, [month, lang]);
 
   function exportFile(format: "excel" | "word" | "pdf") {
     if (!data) return;

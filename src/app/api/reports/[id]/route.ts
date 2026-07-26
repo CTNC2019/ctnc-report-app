@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSession, getLiveSession, isAdmin } from "@/lib/auth";
-import { deleteRowsByKey, readObjects } from "@/lib/sheets";
+import { deleteRowsByKey, readObjects, getMasterData, siteName } from "@/lib/sheets";
 import { parsePhotos, parseDocs } from "@/lib/reportData";
 
 // Child tables that store rows keyed by Report_ID. Deleting a report wipes the parent
@@ -26,7 +26,7 @@ export async function GET(_request: Request, ctx: { params: Promise<{ id: string
   if (!me) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   const { id } = await ctx.params;
 
-  const [reports, users, siteUpdates, activities, proposals, reportItems, comms, issues, priorities, deadlines] = await Promise.all([
+  const [reports, users, siteUpdates, activities, proposals, reportItems, comms, issues, priorities, deadlines, masterData] = await Promise.all([
     readObjects("Fact_Reports"),
     readObjects("Dim_Users"),
     readObjects("Data_Site_Updates"),
@@ -37,6 +37,7 @@ export async function GET(_request: Request, ctx: { params: Promise<{ id: string
     readObjects("Data_Challenges"),
     readObjects("Data_Priorities"),
     readObjects("Data_Deadlines"),
+    getMasterData(),
   ]);
 
   const report = reports.find((r) => r.Report_ID === id);
@@ -51,6 +52,7 @@ export async function GET(_request: Request, ctx: { params: Promise<{ id: string
     .filter((s) => s.Report_ID === id)
     .map((s) => ({
       siteCode: s.Site_Code,
+      siteName: siteName(masterData.sites, s.Site_Code),
       activities: activities
         .filter((a) => a.Report_ID === id && a.Site_Code === s.Site_Code)
         .map((a) => ({ activityType: a.Activity_Type, desc: a.Activity_Desc })),

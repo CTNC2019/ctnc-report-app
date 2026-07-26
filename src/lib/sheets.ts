@@ -3,7 +3,7 @@ import path from "path";
 
 export const SPREADSHEET_ID = "1HrCiINzXArLTGXxR_atGxScFbcQkHCioFWoaWKXzo3o";
 
-export type MasterItem = { code: string; vi: string; en: string };
+export type MasterItem = { code: string; vi: string; en: string; enShort?: string };
 
 // ---- Built-in fallback wording ----
 // These are ONLY used if the "Master_Data" sheet tab is missing, empty, or fails to
@@ -13,14 +13,14 @@ export type MasterItem = { code: string; vi: string; en: string };
 // change — every historical report row references these codes, not the labels.
 
 const DEFAULT_SITES: MasterItem[] = [
-  { code: "TH", vi: "Rừng phòng hộ Tây Hòa", en: "Tay Hoa Protection Forest" },
-  { code: "SH", vi: "Rừng phòng hộ Sông Hinh", en: "Song Hinh Protection Forest" },
-  { code: "DC", vi: "Rừng đặc dụng Đèo Cả", en: "Deo Ca Special-use Forest" },
-  { code: "VP", vi: "Rừng phòng hộ Núi Vọng Phu", en: "Nui Vong Phu Protection Forest" },
-  { code: "ES", vi: "Khu BTTN Ea Sô", en: "Ea So Nature Reserve" },
-  { code: "NV", vi: "RPH Ninh Hòa – Vạn Ninh", en: "Ninh Hoa Van Ninh Protection Forest" },
-  { code: "BH", vi: "Khu BTTN Bắc Hải Vân", en: "Bac Hai Van Nature Reserve" },
-  { code: "CD", vi: "VQG Côn Đảo", en: "Con Dao National Park" },
+  { code: "TH", vi: "Rừng phòng hộ Tây Hòa", en: "Tay Hoa Protection Forest", enShort: "Tay Hoa PF" },
+  { code: "SH", vi: "Rừng phòng hộ Sông Hinh", en: "Song Hinh Protection Forest", enShort: "Song Hinh PF" },
+  { code: "DC", vi: "Rừng đặc dụng Đèo Cả", en: "Deo Ca Special-use Forest", enShort: "Deo Ca SuF" },
+  { code: "VP", vi: "Rừng phòng hộ Núi Vọng Phu", en: "Nui Vong Phu Protection Forest", enShort: "Nui Vong Phu PF" },
+  { code: "ES", vi: "Khu BTTN Ea Sô", en: "Ea So Nature Reserve", enShort: "Ea So NR" },
+  { code: "NV", vi: "RPH Ninh Hòa – Vạn Ninh", en: "Ninh Hoa Van Ninh Protection Forest", enShort: "Ninh Hoa Van Ninh PF" },
+  { code: "BH", vi: "Khu BTTN Bắc Hải Vân", en: "Bac Hai Van Nature Reserve", enShort: "Bac Hai Van PL" },
+  { code: "CD", vi: "VQG Côn Đảo", en: "Con Dao National Park", enShort: "Con Dao NP" },
 ];
 
 const DEFAULT_ACTIVITY_TYPES: MasterItem[] = [
@@ -206,10 +206,15 @@ export function nowMonth(): string {
   return String(d.getMonth() + 1).padStart(2, "0") + "/" + d.getFullYear();
 }
 
-export function siteName(sites: MasterItem[], code: string, lang: "vi" | "en" = "vi"): string {
+// Site names are always shown in their short English form (Label_EN_short in
+// Master_Data), everywhere in the app — form, Dashboard, report detail, and
+// Word/PDF/Excel exports — independent of the VI/EN language toggle. That toggle
+// still governs every OTHER master-data category (activity types, comm channels,
+// proposal statuses) via labelOf() below.
+export function siteName(sites: MasterItem[], code: string): string {
   const s = sites.find((x) => x.code === code);
   if (!s) return code;
-  return `${lang === "vi" ? s.vi : s.en} (${code})`;
+  return `${s.enShort || s.en} (${code})`;
 }
 
 // ---- Sheet-driven master data (dropdown labels: sites, activity types, etc.) ----
@@ -269,6 +274,7 @@ export async function getMasterData(): Promise<MasterData> {
         code: row.Code,
         vi: row.Label_VI || row.Code,
         en: row.Label_EN || row.Label_VI || row.Code,
+        enShort: row.Label_EN_short || row.Label_EN || row.Label_VI || row.Code,
         sort: Number(row.Sort_Order) || 0,
       });
     }
@@ -278,7 +284,7 @@ export async function getMasterData(): Promise<MasterData> {
     for (const key of Object.keys(grouped) as (keyof MasterData)[]) {
       const list = grouped[key];
       if (list && list.length) {
-        result[key] = list.sort((a, b) => a.sort - b.sort).map(({ code, vi, en }) => ({ code, vi, en }));
+        result[key] = list.sort((a, b) => a.sort - b.sort).map(({ code, vi, en, enShort }) => ({ code, vi, en, enShort }));
       }
     }
   } catch {
