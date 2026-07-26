@@ -368,6 +368,7 @@ export type RawSiteUpdate = {
   numActs: number;
   activitiesList: RawActivity[];
   desc: string;
+  notes: string;
   results: string;
   plan: string;
   photos: PhotoItem[];
@@ -422,6 +423,7 @@ export async function getMonthRawRows(month: string): Promise<{
         numActs: activitiesList.length || parseInt(s.Num_Acts, 10) || 0,
         activitiesList,
         desc: s.Activities_Notes,
+        notes: s.Notes_This_Month,
         results: s.Results_Challenges,
         plan: s.Next_Month_Plan,
         photos: parsePhotos(s.Photos_JSON),

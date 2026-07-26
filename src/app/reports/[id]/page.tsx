@@ -10,7 +10,7 @@ import { useLanguage } from "@/context/LanguageContext";
 import { useSession } from "@/hooks/useSession";
 
 type Activity = { activityType: string; desc: string };
-type SiteEntry = { siteCode: string; activities: Activity[]; results: string; plan: string; photos: { url: string; caption: string }[] };
+type SiteEntry = { siteCode: string; activities: Activity[]; notes: string; results: string; plan: string; photos: { url: string; caption: string }[] };
 type ReportDetail = {
   id: string;
   userId: string;
@@ -156,6 +156,7 @@ export default function ReportView({ params }: { params: Promise<{ id: string }>
                         ))}
                       </ul>
                     )}
+                    {s.notes && <p className="text-xs text-slate-500 mt-1">{t("form.activityNotes")}: {s.notes}</p>}
                     {s.results && <p className="text-xs text-slate-500 mt-1">{t("form.results")}: {s.results}</p>}
                     {s.plan && <p className="text-xs text-slate-500">{t("form.plan")}: {s.plan}</p>}
                     {s.photos.length > 0 && (

@@ -202,35 +202,6 @@ export default function Dashboard() {
                 <KpiCard label={t("dash.stat.issues")} value={data.kpi.issuesNeedingSupport} color="#C62828" icon={AlertTriangle} />
               </div>
 
-              {/* Members grid */}
-              <div className="bg-white rounded-xl p-6 shadow-sm mb-6">
-                <h2 className="text-base font-bold text-slate-800 mb-4 flex items-center gap-2">
-                  <Users className="w-5 h-5" style={{ color: GREEN }} /> {t("dash.membersTitle")}
-                </h2>
-                <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {data.members.map((m) => (
-                    <div key={m.userId} className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 border border-slate-200">
-                      <div className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0" style={{ background: "#E8F5E9", color: GREEN }}>
-                        {initials(m.name)}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium text-slate-800 truncate">{m.name}</p>
-                        <p className="text-xs text-slate-500">{m.userId} · {m.totalActs} HĐ</p>
-                      </div>
-                      {m.reportId ? (
-                        <Link href={`/reports/${m.reportId}`} className={`text-xs px-2 py-1 rounded-md font-medium flex-shrink-0 ${STATUS_STYLE[m.status]}`}>
-                          {t("status." + m.status.toLowerCase())}
-                        </Link>
-                      ) : (
-                        <span className={`text-xs px-2 py-1 rounded-md font-medium flex-shrink-0 ${STATUS_STYLE[m.status]}`}>
-                          {t("status." + m.status.toLowerCase())}
-                        </span>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-
               {/* 4 charts grid */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
                 <div className="bg-white rounded-xl p-6 shadow-sm">
@@ -299,6 +270,40 @@ export default function Dashboard() {
                       ))}
                     </BarChart>
                   </ResponsiveContainer>
+                </div>
+              </div>
+
+              {/* Members grid */}
+              <div className="bg-white rounded-xl p-6 shadow-sm mb-6">
+                <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+                  <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
+                    <Users className="w-5 h-5" style={{ color: GREEN }} /> {t("dash.membersTitle")}
+                  </h2>
+                  <span className="text-xs font-semibold px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                    {data.members.filter((m) => m.status !== "Missing").length}/{data.members.length} {t("dash.submitted")}
+                  </span>
+                </div>
+                <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {data.members.map((m) => (
+                    <div key={m.userId} className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 border border-slate-200">
+                      <div className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0" style={{ background: "#E8F5E9", color: GREEN }}>
+                        {initials(m.name)}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium text-slate-800 truncate">{m.name}</p>
+                        <p className="text-xs text-slate-500">{m.userId} · {m.totalActs} HĐ</p>
+                      </div>
+                      {m.reportId ? (
+                        <Link href={`/reports/${m.reportId}`} className={`text-xs px-2 py-1 rounded-md font-medium flex-shrink-0 ${STATUS_STYLE[m.status]}`}>
+                          {t("status." + m.status.toLowerCase())}
+                        </Link>
+                      ) : (
+                        <span className={`text-xs px-2 py-1 rounded-md font-medium flex-shrink-0 ${STATUS_STYLE[m.status]}`}>
+                          {t("status." + m.status.toLowerCase())}
+                        </span>
+                      )}
+                    </div>
+                  ))}
                 </div>
               </div>
 

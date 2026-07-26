@@ -66,6 +66,7 @@ export async function GET(request: Request) {
           "Khu vực": s.siteName,
           "Loại hoạt động": a.typeLabel,
           "Mô tả": a.desc,
+          "Ghi chú hoạt động trong tháng": s.notes,
           "Kết quả & khó khăn": s.results,
           "Kế hoạch tháng tới": s.plan,
         }))
@@ -76,6 +77,7 @@ export async function GET(request: Request) {
             "Khu vực": s.siteName,
             "Loại hoạt động": "",
             "Mô tả": s.desc,
+            "Ghi chú hoạt động trong tháng": s.notes,
             "Kết quả & khó khăn": s.results,
             "Kế hoạch tháng tới": s.plan,
           },

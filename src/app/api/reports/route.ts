@@ -36,7 +36,7 @@ export async function GET() {
 }
 
 type ActivityIn = { activityType: string; desc?: string };
-type SiteIn = { siteCode: string; activities?: ActivityIn[]; results?: string; plan?: string; photos?: PhotoItem[] };
+type SiteIn = { siteCode: string; activities?: ActivityIn[]; notes?: string; results?: string; plan?: string; photos?: PhotoItem[] };
 type ProposalIn = { name: string; status?: string; deadline?: string; note?: string };
 type ReportItemIn = { itemName: string; typeCode?: string; statusUpdate?: string; deadlineAction?: string };
 type CommIn = { channelCode: string; count?: number | string; thisMonth?: string; nextMonth?: string };
@@ -92,13 +92,14 @@ export async function POST(request: Request) {
 
   const sites: SiteIn[] = body.sites || [];
   const siteUpdateRows = sites
-    .filter((s) => (s.activities && s.activities.length) || s.results || s.plan || (s.photos && s.photos.length))
+    .filter((s) => (s.activities && s.activities.length) || s.notes || s.results || s.plan || (s.photos && s.photos.length))
     .map((s) => ({
       Update_ID: `${reportId}-${s.siteCode}`,
       Report_ID: reportId,
       Site_Code: s.siteCode,
       Num_Acts: String((s.activities || []).length),
       Activities_Notes: (s.activities || []).map((a) => a.desc).filter(Boolean).join("; "),
+      Notes_This_Month: s.notes || "",
       Results_Challenges: s.results || "",
       Next_Month_Plan: s.plan || "",
       Photos_JSON: stringifyPhotos(s.photos || []),

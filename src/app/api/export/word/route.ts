@@ -97,9 +97,10 @@ export async function GET(request: Request) {
     siteSections.push(label("Số hoạt động / Number of activities"));
     siteSections.push(body(String(up?.numActs || 0)));
     siteSections.push(label("Hoạt động và ghi chú trong tháng / Activities and key notes"));
+    if (up?.notes) siteSections.push(body(up.notes));
     if (up?.activitiesList.length) {
       up.activitiesList.forEach((a) => siteSections.push(new Paragraph({ bullet: { level: 0 }, children: [new TextRun({ text: `${a.typeLabel}${a.desc ? " — " + a.desc : ""}`, size: 20 })] })));
-    } else {
+    } else if (!up?.notes) {
       siteSections.push(body(up?.desc || "—"));
     }
     siteSections.push(label("Kết quả, thách thức, việc cần theo dõi / Key results, challenges or follow-up"));

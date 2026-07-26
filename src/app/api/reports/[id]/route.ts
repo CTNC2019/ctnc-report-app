@@ -52,6 +52,7 @@ export async function GET(_request: Request, ctx: { params: Promise<{ id: string
       activities: activities
         .filter((a) => a.Report_ID === id && a.Site_Code === s.Site_Code)
         .map((a) => ({ activityType: a.Activity_Type, desc: a.Activity_Desc })),
+      notes: s.Notes_This_Month,
       results: s.Results_Challenges,
       plan: s.Next_Month_Plan,
       photos: parsePhotos(s.Photos_JSON),

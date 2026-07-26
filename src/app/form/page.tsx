@@ -23,7 +23,7 @@ type MasterData = {
 
 type Photo = { url: string; caption: string };
 type Activity = { key: number; activityType: string; desc: string };
-type SiteEntry = { siteCode: string; activities: Activity[]; results: string; plan: string; photos: Photo[] };
+type SiteEntry = { siteCode: string; activities: Activity[]; notes: string; results: string; plan: string; photos: Photo[] };
 type Proposal = { key: number; name: string; status: string; deadline: string; note: string };
 type ReportDataItem = { key: number; itemName: string; typeCode: string; statusUpdate: string; deadlineAction: string };
 type CommEntry = { channelCode: string; count: string; thisMonth: string; nextMonth: string };
@@ -40,7 +40,7 @@ function nowMonth() {
 }
 
 function emptySites(sites: MasterItem[]): SiteEntry[] {
-  return sites.map((s) => ({ siteCode: s.code, activities: [], results: "", plan: "", photos: [] }));
+  return sites.map((s) => ({ siteCode: s.code, activities: [], notes: "", results: "", plan: "", photos: [] }));
 }
 function emptyComms(channels: MasterItem[]): CommEntry[] {
   return channels.map((c) => ({ channelCode: c.code, count: "", thisMonth: "", nextMonth: "" }));
@@ -108,7 +108,7 @@ function FormInner() {
               const found = rep.sites.find((x: SiteEntry) => x.siteCode === s.code);
               return found
                 ? { ...found, activities: (found.activities || []).map((a: Activity) => ({ ...a, key: nextKey() })) }
-                : { siteCode: s.code, activities: [], results: "", plan: "", photos: [] };
+                : { siteCode: s.code, activities: [], notes: "", results: "", plan: "", photos: [] };
             })
           );
         } else {
@@ -202,6 +202,7 @@ function FormInner() {
           sites: sites.map((s) => ({
             siteCode: s.siteCode,
             activities: s.activities.map(({ activityType, desc }) => ({ activityType, desc })),
+            notes: s.notes,
             results: s.results,
             plan: s.plan,
             photos: s.photos,
@@ -327,6 +328,10 @@ function FormInner() {
                   </div>
 
                   <div className="grid grid-cols-1 gap-4 mb-4">
+                    <div>
+                      <label className={labelCls}>{t("form.activityNotes")}</label>
+                      <textarea rows={2} value={site.notes} onChange={(e) => updateSite(activeSite, { notes: e.target.value })} className={inputCls + " resize-none"} />
+                    </div>
                     <div>
                       <label className={labelCls}>{t("form.results")}</label>
                       <textarea rows={2} value={site.results} onChange={(e) => updateSite(activeSite, { results: e.target.value })} className={inputCls + " resize-none"} />

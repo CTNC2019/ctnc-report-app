@@ -133,9 +133,10 @@ export async function GET(request: Request) {
     label("Số hoạt động");
     bodyText(String(up?.numActs || 0));
     label("Hoạt động và ghi chú trong tháng");
+    if (up?.notes) bodyText(up.notes);
     if (up?.activitiesList.length) {
       up.activitiesList.forEach((a) => bodyText(`• ${a.typeLabel}${a.desc ? " — " + a.desc : ""}`));
-    } else {
+    } else if (!up?.notes) {
       bodyText(up?.desc || "—");
     }
     label("Kết quả, thách thức, việc cần theo dõi");
