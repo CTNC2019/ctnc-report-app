@@ -63,7 +63,7 @@ export default function LoginForm() {
               <User className="h-5 w-5 text-emerald-300/70" />
             </div>
             <input
-              type="text"
+              type="email"
               value={userId}
               onChange={(e) => setUserId(e.target.value)}
               className="block w-full pl-10 pr-3 py-3 border border-white/10 rounded-xl leading-5 bg-white/5 text-white placeholder-white/30 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm transition-all"
